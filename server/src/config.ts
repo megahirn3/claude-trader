@@ -40,7 +40,8 @@ export const config = {
     /** Whether real-money orders are permitted right now. */
     liveEnabled,
     allowLiveTrading,
-    maxOrderNotionalUsd: Number(process.env.MAX_ORDER_NOTIONAL_USD ?? 1000),
+    /** Max share of current portfolio value any single trade may use, in percent. */
+    maxTradePct: Number(process.env.MAX_TRADE_PCT ?? 5),
   },
 
   schedule: {
@@ -51,7 +52,7 @@ export const config = {
     slots: [
       slot("morning", "10:00", "Morning review", true),
       slot("midday", "12:30", "Midday check", true),
-      slot("preclose", "15:30", "Pre-close positioning", true),
+      slot("preclose", "15:45", "Pre-close positioning", true),
       slot("eod", "16:15", "End-of-day summary", false),
     ],
   },

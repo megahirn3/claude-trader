@@ -50,6 +50,13 @@ both are set, the API key wins and you get billed — so leave it unset.)
   (`npm i -g @anthropic-ai/claude-code`, then `claude` once to log in)
 - An **Alpaca** account → grab **paper** API keys from <https://alpaca.markets>
 
+> **Is Alpaca the broker, or just an API?** Alpaca *is* the broker — Alpaca
+> Securities (US, FINRA/SIPC) executes and custodies your orders and cash. It is
+> not a bridge to another broker like Trade Republic (which has no trading API and
+> can't be automated). **Paper** trading works anywhere; **live** Alpaca accounts
+> aren't available in every country — check your country is supported before
+> funding one. The bot and the per-trade cap behave identically either way.
+
 ### 1. Install
 ```bash
 npm install
@@ -120,7 +127,7 @@ holidays are skipped automatically via Alpaca's calendar). All times are in
 |---|---|---|---|
 | **10:00** | Morning review | ✅ | Opening volatility has settled and the free 15‑min‑delayed data is meaningful — react to overnight news/gaps and set the day's plan |
 | **12:30** | Midday check | ✅ | Confirm the morning thesis held; catch midday catalysts; trim/add |
-| **15:30** | Pre‑close positioning | ✅ | Last actionable window — take profits, cut losers, manage overnight risk |
+| **15:45** | Pre‑close positioning | ✅ | Last actionable window — take profits, cut losers, manage overnight risk |
 | **16:15** | End‑of‑day summary | ❌ **review only** | Market closed; final bars in — full‑day P&L recap, movers, what it did, watchlist for tomorrow |
 
 The **end‑of‑day slot cannot trade** — its order tools are removed entirely, so
@@ -131,7 +138,7 @@ Configure in `.env`:
 SCHEDULE_ENABLED=true       # master switch
 MORNING_TIME=10:00          # set any slot to "off" to disable it
 MIDDAY_TIME=12:30
-PRECLOSE_TIME=15:30
+PRECLOSE_TIME=15:45
 EOD_TIME=16:15
 ```
 From the dashboard you can toggle the autopilot on/off and hit **run now** on any
@@ -150,9 +157,10 @@ Money is hard to get back, so the design is defensive:
 2. **Two switches for live.** Real-money orders require **both**
    `TRADING_MODE=live` **and** `ALLOW_LIVE_TRADING=true`. Either one alone keeps
    you in paper mode.
-3. **Per-order notional cap.** `MAX_ORDER_NOTIONAL_USD` (default `$1000`) is
-   enforced server-side before any order is sent — the agent physically cannot
-   place a larger single order, whatever it decides.
+3. **Per-trade size cap (% of portfolio).** `MAX_TRADE_PCT` (default `5`) caps
+   every **buy** at that share of your *current* portfolio value — e.g. 5% of a
+   $2,000 account is $100/trade — enforced server-side before any order is sent.
+   It scales as your account grows, and sells are never size-capped.
 4. **Decisions are logged before action.** The agent calls `record_decision`
    with its rationale, visible in the dashboard, before placing orders.
 5. **Buying-power limits** are enforced by Alpaca itself.
@@ -212,4 +220,4 @@ claude-trader/
 - **Not financial advice.** An LLM can be wrong, overconfident, or misread data.
   Keep a human in the loop, especially before enabling live trading.
 - **Subscription usage.** Heavy agent runs consume your Claude usage; long runs
-  use more. Keep `MAX_ORDER_NOTIONAL_USD` and your own judgment as the guardrails.
+  use more. Keep `MAX_TRADE_PCT` conservative and your own judgment as the guardrails.

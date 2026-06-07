@@ -2,7 +2,7 @@
 
 export interface AppConfig {
   model: string;
-  trading: { mode: "paper" | "live"; liveEnabled: boolean; maxOrderNotionalUsd: number };
+  trading: { mode: "paper" | "live"; liveEnabled: boolean; maxTradePct: number };
   ready: {
     claude: boolean;
     usingSubscription: boolean;

@@ -30,7 +30,7 @@ api.get("/config", (_req, res) => {
     trading: {
       mode: config.trading.mode,
       liveEnabled: config.trading.liveEnabled,
-      maxOrderNotionalUsd: config.trading.maxOrderNotionalUsd,
+      maxTradePct: config.trading.maxTradePct,
     },
     ready: {
       // The agent can run if it has a way to reach Claude via the subscription.

@@ -84,6 +84,7 @@ function Header({ cfg, clock }: { cfg: AppConfig | null; clock: { is_open: boole
             <Pill ok={cfg.trading.mode === "paper"} warn={cfg.trading.liveEnabled}>
               {cfg.trading.liveEnabled ? "LIVE money" : "Paper"}
             </Pill>
+            <Pill muted>≤{cfg.trading.maxTradePct}% / trade</Pill>
             <Pill muted>{cfg.model}</Pill>
           </>
         )}

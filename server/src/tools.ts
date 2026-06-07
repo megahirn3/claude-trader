@@ -201,17 +201,32 @@ export function buildAlpacaServer(runId: string) {
           if (args.type === "limit" && !args.limit_price) return fail("limit_price is required for limit orders.");
           if (args.type === "limit" && args.notional) return fail("notional orders must be market orders; use qty for limit orders.");
 
-          // ── Safety: estimate notional and enforce the hard cap ──────────────
-          let estNotional = args.notional ?? null;
-          if (estNotional === null && args.qty) {
-            const px = args.limit_price ?? (await priceFor(symbol));
-            estNotional = px ? px * args.qty : null;
-          }
-          const cap = config.trading.maxOrderNotionalUsd;
-          if (estNotional !== null && estNotional > cap) {
-            const msg = `Order blocked: estimated notional $${estNotional.toFixed(2)} exceeds the per-order cap of $${cap}. Reduce the size.`;
-            runStore.emit(runId, { kind: "error", message: msg, at: now() });
-            return fail(msg);
+          // ── Safety: cap each BUY at a fixed % of current portfolio value ────
+          // Sells (reducing exposure) are not size-capped.
+          if (args.side === "buy") {
+            let estNotional = args.notional ?? null;
+            if (estNotional === null && args.qty) {
+              const px = args.limit_price ?? (await priceFor(symbol));
+              estNotional = px ? px * args.qty : null;
+            }
+            if (estNotional === null) {
+              return fail(
+                "Can't size this buy: provide a `notional` dollar amount (preferred for sizing) or a `limit_price` so the order value can be checked against the per-trade cap.",
+              );
+            }
+            let portfolioValue = 0;
+            try {
+              const acct = await alpaca.getAccount();
+              portfolioValue = Number(acct.portfolio_value || acct.equity || 0);
+            } catch (e) {
+              return fail(`Couldn't read account to size the order: ${errMsg(e)}`);
+            }
+            const cap = portfolioValue * (config.trading.maxTradePct / 100);
+            if (estNotional > cap + 0.01) {
+              const msg = `Order blocked: ~$${estNotional.toFixed(2)} exceeds the per-trade limit of ${config.trading.maxTradePct}% of portfolio ($${cap.toFixed(2)} of $${portfolioValue.toFixed(2)}). Reduce the size.`;
+              runStore.emit(runId, { kind: "error", message: msg, at: now() });
+              return fail(msg);
+            }
           }
 
           try {
