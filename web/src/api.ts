@@ -48,12 +48,31 @@ export interface Order {
 export interface RunSummary {
   id: string;
   prompt: string;
+  label: string;
   mode: "paper" | "live";
   status: "running" | "completed" | "failed";
   startedAt: string;
   finishedAt?: string;
   costUsd?: number;
   eventCount: number;
+}
+
+export interface ScheduleSlot {
+  id: string;
+  label: string;
+  time: string;
+  enabled: boolean;
+  allowTrading: boolean;
+  nextRun: string | null;
+  lastRunAt?: string;
+  lastRunId?: string;
+}
+
+export interface ScheduleState {
+  enabled: boolean;
+  timezone: string;
+  marketTime: string;
+  slots: ScheduleSlot[];
 }
 
 export type RunEvent =
@@ -100,6 +119,23 @@ export const api = {
   cancelOrder: async (id: string): Promise<void> => {
     const res = await fetch(`/api/orders/${id}`, { method: "DELETE" });
     if (!res.ok) throw new Error("Failed to cancel order");
+  },
+
+  schedule: () => get<ScheduleState>("/api/schedule"),
+
+  setSchedule: async (enabled: boolean): Promise<ScheduleState> => {
+    const res = await fetch("/api/schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    return res.json();
+  },
+
+  runSlot: async (slot: string): Promise<string> => {
+    const res = await fetch(`/api/schedule/run/${slot}`, { method: "POST" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Failed to start");
+    return (await res.json()).id as string;
   },
 };
 

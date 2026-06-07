@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { alpaca, AlpacaError } from "./alpaca.js";
 import { runStore } from "./store.js";
 import { runCycle } from "./agent.js";
+import { startScheduler, scheduleState, setScheduleEnabled, runSlotNow } from "./scheduler.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -108,10 +109,27 @@ api.post("/runs", (req, res) => {
     return res.status(400).json({ error: "Alpaca API keys are not configured." });
   }
   const prompt = typeof req.body?.prompt === "string" && req.body.prompt.trim() ? req.body.prompt.trim() : DEFAULT_PROMPT;
-  const run = runStore.create(prompt, config.trading.mode);
+  const run = runStore.create(prompt, config.trading.mode, "Manual");
   // Fire-and-forget; the client follows progress over SSE.
   void runCycle(run, prompt);
   res.status(201).json({ id: run.id });
+});
+
+// ── Schedule (daily autopilot) ────────────────────────────────────────────────
+api.get("/schedule", (_req, res) => res.json(scheduleState()));
+
+api.post("/schedule", (req, res) => {
+  if (typeof req.body?.enabled === "boolean") setScheduleEnabled(req.body.enabled);
+  res.json(scheduleState());
+});
+
+api.post("/schedule/run/:slot", (req, res) => {
+  if (!config.claude.hasOAuthToken && !config.claude.hasApiKey)
+    return res.status(400).json({ error: "No Claude credentials. Run `npm run setup-token`." });
+  if (!config.alpaca.configured) return res.status(400).json({ error: "Alpaca API keys are not configured." });
+  const result = runSlotNow(req.params.slot);
+  if (!result) return res.status(404).json({ error: "Unknown schedule slot" });
+  res.status(201).json(result);
 });
 
 api.get("/runs", (_req, res) => {
@@ -120,6 +138,7 @@ api.get("/runs", (_req, res) => {
     runStore.list().map((r) => ({
       id: r.id,
       prompt: r.prompt,
+      label: r.label,
       mode: r.mode,
       status: r.status,
       startedAt: r.startedAt,
@@ -193,5 +212,6 @@ app.listen(config.port, () => {
     console.log(`  ✓ Using Claude subscription (CLAUDE_CODE_OAUTH_TOKEN).`);
   }
   if (!config.alpaca.configured) console.log(`  ⚠ Alpaca keys missing — set ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY.`);
+  startScheduler();
   console.log("");
 });

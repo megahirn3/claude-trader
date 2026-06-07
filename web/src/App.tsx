@@ -9,6 +9,8 @@ import {
   type Position,
   type RunEvent,
   type RunSummary,
+  type ScheduleState,
+  type ScheduleSlot,
 } from "./api";
 
 export function App() {
@@ -18,6 +20,8 @@ export function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [clock, setClock] = useState<{ is_open: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // When a scheduled "Run now" starts a run, ask the agent panel to watch it.
+  const [watchRequest, setWatchRequest] = useState<{ id: string; n: number } | null>(null);
 
   const refreshPortfolio = useCallback(async () => {
     try {
@@ -48,11 +52,12 @@ export function App() {
       <main>
         <section className="left">
           <AccountCards account={account} />
+          <Schedule cfg={cfg} onRunStarted={(id) => setWatchRequest({ id, n: Date.now() })} />
           <Positions positions={positions} />
           <Orders orders={orders} onCancel={refreshPortfolio} />
         </section>
         <section className="right">
-          <AgentPanel cfg={cfg} onPortfolioMayHaveChanged={refreshPortfolio} />
+          <AgentPanel cfg={cfg} watchRequest={watchRequest} onPortfolioMayHaveChanged={refreshPortfolio} />
         </section>
       </main>
     </div>
@@ -189,9 +194,96 @@ function Orders({ orders, onCancel }: { orders: Order[]; onCancel: () => void })
   );
 }
 
+// ── Schedule (daily autopilot) ────────────────────────────────────────────────
+
+function Schedule({ cfg, onRunStarted }: { cfg: AppConfig | null; onRunStarted: (id: string) => void }) {
+  const [state, setState] = useState<ScheduleState | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api.schedule().then(setState).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const toggle = async () => {
+    if (!state) return;
+    setState(await api.setSchedule(!state.enabled));
+  };
+
+  const runNow = async (slot: ScheduleSlot) => {
+    setBusy(slot.id);
+    try {
+      const id = await api.runSlot(slot.id);
+      onRunStarted(id);
+    } catch {
+      /* surfaced in the agent panel */
+    } finally {
+      setBusy(null);
+      setTimeout(load, 500);
+    }
+  };
+
+  const ready = cfg?.ready.claude && cfg?.ready.alpaca;
+
+  return (
+    <Card
+      title="Daily autopilot"
+      action={
+        state && (
+          <button className={`toggle ${state.enabled ? "on" : ""}`} onClick={toggle}>
+            {state.enabled ? "ON" : "OFF"}
+          </button>
+        )
+      }
+    >
+      {!state ? (
+        <p className="dim">Loading schedule…</p>
+      ) : (
+        <>
+          <p className="dim small schedule-tz">
+            Times in {state.timezone.replace("America/", "").replace("_", " ")} (market) · now {state.marketTime} ET
+          </p>
+          <div className="slots">
+            {state.slots.map((slot) => (
+              <div key={slot.id} className={`slot ${slot.enabled ? "" : "off"}`}>
+                <div className="slot-time mono">{slot.time}</div>
+                <div className="slot-main">
+                  <div className="slot-label">
+                    {slot.label}
+                    {!slot.allowTrading && <span className="badge review">review only</span>}
+                  </div>
+                  <div className="slot-next dim small">
+                    {slot.enabled ? (state.enabled ? `next: ${slot.nextRun ?? "—"}` : "autopilot off") : "disabled"}
+                  </div>
+                </div>
+                <button className="link" disabled={!ready || busy === slot.id} onClick={() => runNow(slot)}>
+                  {busy === slot.id ? "…" : "run now"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 // ── Agent panel ───────────────────────────────────────────────────────────────
 
-function AgentPanel({ cfg, onPortfolioMayHaveChanged }: { cfg: AppConfig | null; onPortfolioMayHaveChanged: () => void }) {
+function AgentPanel({
+  cfg,
+  watchRequest,
+  onPortfolioMayHaveChanged,
+}: {
+  cfg: AppConfig | null;
+  watchRequest: { id: string; n: number } | null;
+  onPortfolioMayHaveChanged: () => void;
+}) {
   const [prompt, setPrompt] = useState("");
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -200,12 +292,21 @@ function AgentPanel({ cfg, onPortfolioMayHaveChanged }: { cfg: AppConfig | null;
   const [starting, setStarting] = useState(false);
   const esRef = useRef<EventSource | null>(null);
   const timelineRef = useRef<HTMLDivElement | null>(null);
+  // Refs so the polling loop can read current state without re-subscribing.
+  const statusRef = useRef(status);
+  const activeRef = useRef(activeId);
+  statusRef.current = status;
+  activeRef.current = activeId;
 
-  const loadRuns = useCallback(() => {
-    api.runs().then(setRuns).catch(() => {});
+  const loadRuns = useCallback(async (): Promise<RunSummary[]> => {
+    const list = await api.runs().catch(() => [] as RunSummary[]);
+    setRuns(list);
+    return list;
   }, []);
 
-  useEffect(loadRuns, [loadRuns]);
+  useEffect(() => {
+    loadRuns();
+  }, [loadRuns]);
 
   const watch = useCallback(
     (id: string, replay = false) => {
@@ -241,6 +342,30 @@ function AgentPanel({ cfg, onPortfolioMayHaveChanged }: { cfg: AppConfig | null;
     },
     [watch],
   );
+
+  // A scheduled "Run now" asks us to watch a specific run.
+  useEffect(() => {
+    if (watchRequest) {
+      setEvents([]);
+      setStatus("running");
+      watch(watchRequest.id, true);
+      loadRuns();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchRequest]);
+
+  // Poll for runs; if we're idle and a scheduled run is now executing, attach to it live.
+  useEffect(() => {
+    const poll = async () => {
+      const list = await loadRuns();
+      if (statusRef.current !== "running") {
+        const live = list.find((r) => r.status === "running");
+        if (live && live.id !== activeRef.current) openRun(live.id);
+      }
+    };
+    const t = setInterval(poll, 15000);
+    return () => clearInterval(t);
+  }, [loadRuns, openRun]);
 
   useEffect(() => {
     // Auto-scroll the timeline as events arrive.
@@ -302,7 +427,7 @@ function RunBadge({ runs, activeId, onPick }: { runs: RunSummary[]; activeId: st
       <option value="">Past runs…</option>
       {runs.map((r) => (
         <option key={r.id} value={r.id}>
-          {new Date(r.startedAt).toLocaleString()} · {r.status}
+          {r.label} · {new Date(r.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {r.status}
         </option>
       ))}
     </select>

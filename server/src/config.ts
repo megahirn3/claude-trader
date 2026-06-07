@@ -42,6 +42,34 @@ export const config = {
     allowLiveTrading,
     maxOrderNotionalUsd: Number(process.env.MAX_ORDER_NOTIONAL_USD ?? 1000),
   },
+
+  schedule: {
+    // Master switch for the daily autopilot.
+    enabled: bool(process.env.SCHEDULE_ENABLED, true),
+    // All times are interpreted in US market time.
+    timezone: "America/New_York",
+    slots: [
+      slot("morning", "10:00", "Morning review", true),
+      slot("midday", "12:30", "Midday check", true),
+      slot("preclose", "15:30", "Pre-close positioning", true),
+      slot("eod", "16:15", "End-of-day summary", false),
+    ],
+  },
 } as const;
+
+export interface ScheduleSlot {
+  id: string;
+  time: string; // "HH:MM" in market time, or disabled
+  label: string;
+  allowTrading: boolean;
+  enabled: boolean;
+}
+
+/** Build a schedule slot, allowing the time to be overridden via env (e.g. MIDDAY_TIME=12:45 or "off"). */
+function slot(id: string, defaultTime: string, label: string, allowTrading: boolean): ScheduleSlot {
+  const time = (process.env[`${id.toUpperCase()}_TIME`] ?? defaultTime).trim();
+  const enabled = time.toLowerCase() !== "off" && /^\d{1,2}:\d{2}$/.test(time);
+  return { id, time, label, allowTrading, enabled };
+}
 
 export type AppConfig = typeof config;

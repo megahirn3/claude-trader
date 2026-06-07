@@ -108,6 +108,12 @@ export const alpaca = {
       trading("/v2/clock"),
     ),
 
+  /** Trading-calendar sessions between two YYYY-MM-DD dates (empty on holidays/weekends). */
+  getCalendar: (start: string, end: string) => {
+    const q = new URLSearchParams({ start, end });
+    return request<Array<{ date: string; open: string; close: string }>>(trading(`/v2/calendar?${q.toString()}`));
+  },
+
   getOrders: (params: { status?: string; limit?: number } = {}) => {
     const q = new URLSearchParams();
     q.set("status", params.status ?? "all");

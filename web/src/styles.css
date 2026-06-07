@@ -91,6 +91,27 @@ td { padding: 8px; border-top: 1px solid var(--border); font-variant-numeric: ta
 .link { background: none; border: none; color: var(--accent-2); cursor: pointer; font-size: 12px; padding: 0; }
 .link:hover { text-decoration: underline; }
 
+/* Schedule */
+.toggle {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer;
+  padding: 3px 12px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--panel-2); color: var(--dim);
+}
+.toggle.on { color: var(--up); border-color: #21422f; background: #11271c; }
+.schedule-tz { margin: 0 0 12px; }
+.slots { display: flex; flex-direction: column; gap: 8px; }
+.slot {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px;
+}
+.slot.off { opacity: 0.45; }
+.slot-time { font-size: 15px; font-weight: 680; min-width: 46px; color: var(--text); }
+.slot-main { flex: 1; min-width: 0; }
+.slot-label { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.slot-next { margin-top: 1px; }
+.badge { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 5px; }
+.badge.review { color: var(--accent-2); background: #15243a; border: 1px solid #243349; }
+
 /* Agent panel */
 .right .card { display: flex; flex-direction: column; min-height: 640px; }
 .right .card-body { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; }

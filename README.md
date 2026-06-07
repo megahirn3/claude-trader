@@ -110,6 +110,37 @@ research and trade.
 
 ---
 
+## Daily autopilot (scheduler)
+
+The bot runs itself at strategic points each **trading day** (weekends and
+holidays are skipped automatically via Alpaca's calendar). All times are in
+**US market time** (`America/New_York`) and configurable in `.env`.
+
+| Time (ET) | Slot | Trades? | Purpose |
+|---|---|---|---|
+| **10:00** | Morning review | ✅ | Opening volatility has settled and the free 15‑min‑delayed data is meaningful — react to overnight news/gaps and set the day's plan |
+| **12:30** | Midday check | ✅ | Confirm the morning thesis held; catch midday catalysts; trim/add |
+| **15:30** | Pre‑close positioning | ✅ | Last actionable window — take profits, cut losers, manage overnight risk |
+| **16:15** | End‑of‑day summary | ❌ **review only** | Market closed; final bars in — full‑day P&L recap, movers, what it did, watchlist for tomorrow |
+
+The **end‑of‑day slot cannot trade** — its order tools are removed entirely, so
+it's a guaranteed read‑only recap, not just a polite instruction.
+
+Configure in `.env`:
+```ini
+SCHEDULE_ENABLED=true       # master switch
+MORNING_TIME=10:00          # set any slot to "off" to disable it
+MIDDAY_TIME=12:30
+PRECLOSE_TIME=15:30
+EOD_TIME=16:15
+```
+From the dashboard you can toggle the autopilot on/off and hit **run now** on any
+slot to trigger it immediately (handy for testing). Every scheduled run appears,
+labeled, in the run history and streams live just like a manual run.
+
+> The server process must be running for the schedule to fire. Keep it up with a
+> process manager (pm2, systemd, a container, etc.) for unattended operation.
+
 ## Safety
 
 Money is hard to get back, so the design is defensive:
@@ -166,6 +197,9 @@ claude-trader/
 | `GET` | `/api/runs` | List past runs |
 | `GET` | `/api/runs/:id` | Full run with events |
 | `GET` | `/api/runs/:id/stream` | SSE stream of a run's events |
+| `GET` | `/api/schedule` | Autopilot state + slots + next-run times |
+| `POST` | `/api/schedule` | Enable/disable autopilot (`{ enabled }`) |
+| `POST` | `/api/schedule/run/:slot` | Trigger a slot now (`morning`/`midday`/`preclose`/`eod`) |
 
 ---
 

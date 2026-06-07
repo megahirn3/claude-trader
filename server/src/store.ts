@@ -26,6 +26,7 @@ export type RunStatus = "running" | "completed" | "failed";
 export interface Run {
   id: string;
   prompt: string;
+  label: string;
   mode: "paper" | "live";
   status: RunStatus;
   startedAt: string;
@@ -40,10 +41,11 @@ class RunStore {
   private runs = new Map<string, Run>();
   private emitters = new Map<string, EventEmitter>();
 
-  create(prompt: string, mode: "paper" | "live"): Run {
+  create(prompt: string, mode: "paper" | "live", label = "Manual"): Run {
     const run: Run = {
       id: randomUUID(),
       prompt,
+      label,
       mode,
       status: "running",
       startedAt: new Date().toISOString(),
