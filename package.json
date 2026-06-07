@@ -1,0 +1,25 @@
+{
+  "name": "claude-trader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-stack autonomous trading bot powered by your Claude Max subscription (via the Claude Agent SDK, no Anthropic API key) and Alpaca.",
+  "type": "module",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm --workspace server run dev",
+    "dev:web": "npm --workspace web run dev",
+    "build": "npm --workspace web run build",
+    "start": "npm --workspace server run start",
+    "setup-token": "claude setup-token"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
