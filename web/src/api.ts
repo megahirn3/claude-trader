@@ -8,6 +8,9 @@ export interface AppConfig {
     maxTradePct: number;
     dailyLossLimitPct: number;
     avoidDayTrades: boolean;
+    noLeverage: boolean;
+    minPriceUsd: number;
+    excludeLeveragedEtf: boolean;
   };
   broker: string;
   dataSource: string;
@@ -117,6 +120,13 @@ export interface WatchlistItem {
   note: string;
 }
 
+export interface AlertItem {
+  at: string;
+  title: string;
+  detail?: string;
+  delivered: boolean;
+}
+
 export interface Run extends RunSummary {
   events: RunEvent[];
   result?: string;
@@ -177,6 +187,8 @@ export const api = {
     const res = await fetch("/api/notify/test", { method: "POST" });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Failed to send test");
   },
+
+  alerts: () => get<AlertItem[]>("/api/alerts"),
 
   kill: async (): Promise<{ cancelledOrders: number; closedPositions: number; errors: string[] }> => {
     const res = await fetch("/api/kill", { method: "POST" });

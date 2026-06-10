@@ -56,6 +56,19 @@ body {
 .pill.bad { color: var(--down); border-color: #44211f; background: #2a1413; }
 .pill.warn { color: var(--warn); border-color: #4a3a16; background: #2a2110; }
 .pill.muted { color: var(--dim); }
+.pill-sm { font-size: 10.5px; padding: 3px 8px; opacity: 0.92; }
+.guards-sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px 4px; }
+
+/* Discord alerts card */
+.alerts-head { display: flex; align-items: center; gap: 8px; }
+.alerts-dot { width: 8px; height: 8px; border-radius: 50%; }
+.alerts-dot.on { background: var(--up); box-shadow: 0 0 6px var(--up); }
+.alerts-dot.off { background: var(--dim); }
+.alert-feed { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+.alert-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; padding: 3px 0; border-top: 1px solid var(--border); }
+.alert-time { color: var(--dim); font-size: 11px; flex: 0 0 auto; }
+.alert-title { color: var(--text); }
+.alert-undeliv { color: var(--warn); margin-left: auto; }
 
 .banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; }
 .banner.error { background: #2a1413; color: var(--down); border: 1px solid #44211f; }

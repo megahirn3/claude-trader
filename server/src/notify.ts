@@ -26,19 +26,38 @@ interface Embed {
   timestamp?: string;
 }
 
+// Ring buffer of recently-sent alerts, surfaced on the dashboard so you can see
+// the alert feed without leaving the app.
+export interface AlertRecord {
+  at: string;
+  title: string;
+  detail?: string;
+  delivered: boolean;
+}
+const recentAlerts: AlertRecord[] = [];
+export function getRecentAlerts(limit = 20): AlertRecord[] {
+  return recentAlerts.slice(0, limit);
+}
+
 async function post(embed: Embed): Promise<boolean> {
   const url = config.notify.discordWebhookUrl;
-  if (!url) return false;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: "Claude Trader", embeds: [embed] }),
-    });
-    return res.ok;
-  } catch {
-    return false;
+  let delivered = false;
+  if (url) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "Claude Trader", embeds: [embed] }),
+      });
+      delivered = res.ok;
+    } catch {
+      delivered = false;
+    }
   }
+  // Record regardless of delivery so the dashboard shows what was triggered.
+  recentAlerts.unshift({ at: embed.timestamp ?? new Date().toISOString(), title: embed.title, detail: embed.description, delivered });
+  if (recentAlerts.length > 50) recentAlerts.length = 50;
+  return delivered;
 }
 
 function footer(run: Run): { text: string } {

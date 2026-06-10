@@ -11,7 +11,7 @@ import { runStore } from "./store.js";
 import { runCycle } from "./agent.js";
 import { startScheduler, scheduleState, setScheduleEnabled, runSlotNow } from "./scheduler.js";
 import { listJournal, getWatchlist } from "./db.js";
-import { sendTestNotification } from "./notify.js";
+import { sendTestNotification, getRecentAlerts } from "./notify.js";
 import { killSwitch, resume } from "./control.js";
 import { isHalted } from "./controlState.js";
 
@@ -39,6 +39,9 @@ api.get("/config", (_req, res) => {
       maxTradePct: config.trading.maxTradePct,
       dailyLossLimitPct: config.trading.dailyLossLimitPct,
       avoidDayTrades: config.trading.avoidDayTrades,
+      noLeverage: config.trading.noLeverage,
+      minPriceUsd: config.trading.minPriceUsd,
+      excludeLeveragedEtf: config.trading.excludeLeveragedEtf,
     },
     broker: broker.name,
     dataSource: marketData.quoteSource(),
@@ -128,6 +131,9 @@ api.post("/notify/test", async (_req, res) => {
   if (!ok) return res.status(502).json({ error: "Failed to post to the Discord webhook — check the URL." });
   res.json({ ok: true });
 });
+
+// Recent alerts feed (what was pinged to Discord), shown on the dashboard.
+api.get("/alerts", (_req, res) => res.json(getRecentAlerts(20)));
 
 api.delete("/orders/:id", async (req, res) => {
   try {
@@ -239,8 +245,20 @@ app.use("/api", api);
 // ── Serve the built frontend in production ────────────────────────────────────
 const webDist = path.resolve(__dirname, "../../web/dist");
 if (fs.existsSync(webDist)) {
-  app.use(express.static(webDist));
-  app.get("*", (_req, res) => res.sendFile(path.join(webDist, "index.html")));
+  // Hashed asset files are immutable → cache hard. index.html must NOT be cached,
+  // or browsers (esp. iOS Safari) keep loading a stale build after a redeploy.
+  app.use(
+    express.static(webDist, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith("index.html")) res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        else if (filePath.includes(`${path.sep}assets${path.sep}`)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      },
+    }),
+  );
+  app.get("*", (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.sendFile(path.join(webDist, "index.html"));
+  });
 }
 
 app.listen(config.port, () => {

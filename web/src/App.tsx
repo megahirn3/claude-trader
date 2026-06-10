@@ -14,6 +14,7 @@ import {
   type PortfolioHistory,
   type JournalEntry,
   type WatchlistItem,
+  type AlertItem,
 } from "./api";
 
 // ── Minimal, safe markdown renderer ───────────────────────────────────────────
@@ -164,8 +165,19 @@ function Header({ cfg, clock, onKill }: { cfg: AppConfig | null; clock: { is_ope
             <Pill ok={cfg.trading.mode === "paper"} warn={cfg.trading.liveEnabled}>
               {cfg.trading.liveEnabled ? "LIVE money" : "Paper"}
             </Pill>
-            <Pill muted>≤{cfg.trading.maxTradePct}% / trade</Pill>
             <Pill muted>{cfg.model}</Pill>
+            <span className="guards-sep" />
+            <Pill ok small>≤{cfg.trading.maxTradePct}% / trade</Pill>
+            {cfg.trading.noLeverage && <Pill ok small>no leverage</Pill>}
+            <Pill ok small>−{cfg.trading.dailyLossLimitPct}% breaker</Pill>
+            {cfg.trading.avoidDayTrades && <Pill ok small>no day-trades</Pill>}
+            {(cfg.trading.minPriceUsd > 0 || cfg.trading.excludeLeveragedEtf) && (
+              <Pill ok small>
+                {cfg.trading.minPriceUsd > 0 ? `≥$${cfg.trading.minPriceUsd}` : ""}
+                {cfg.trading.minPriceUsd > 0 && cfg.trading.excludeLeveragedEtf ? " · " : ""}
+                {cfg.trading.excludeLeveragedEtf ? "no lev-ETF" : ""}
+              </Pill>
+            )}
           </>
         )}
         {clock && <Pill ok={clock.is_open} muted={!clock.is_open}>{clock.is_open ? "Market open" : "Market closed"}</Pill>}
@@ -174,9 +186,9 @@ function Header({ cfg, clock, onKill }: { cfg: AppConfig | null; clock: { is_ope
   );
 }
 
-function Pill({ children, ok, warn, muted }: { children: ReactNode; ok?: boolean; warn?: boolean; muted?: boolean }) {
+function Pill({ children, ok, warn, muted, small }: { children: ReactNode; ok?: boolean; warn?: boolean; muted?: boolean; small?: boolean }) {
   const cls = warn ? "warn" : ok ? "good" : muted ? "muted" : "bad";
-  return <span className={`pill ${cls}`}>{children}</span>;
+  return <span className={`pill ${cls}${small ? " pill-sm" : ""}`}>{children}</span>;
 }
 
 function AccountCards({ account }: { account: Account | null }) {
@@ -483,7 +495,18 @@ function Schedule({ cfg, onRunStarted }: { cfg: AppConfig | null; onRunStarted: 
 
 function Alerts({ cfg }: { cfg: AppConfig | null }) {
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [feed, setFeed] = useState<AlertItem[]>([]);
   const on = cfg?.notify.discord;
+
+  const load = useCallback(() => {
+    api.alerts().then(setFeed).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 15000);
+    return () => clearInterval(t);
+  }, [load]);
 
   const test = async () => {
     setState("sending");
@@ -493,28 +516,44 @@ function Alerts({ cfg }: { cfg: AppConfig | null }) {
     } catch {
       setState("error");
     }
-    setTimeout(() => setState("idle"), 2500);
+    setTimeout(() => {
+      setState("idle");
+      load();
+    }, 1500);
   };
 
   return (
     <Card
       title="Discord alerts"
       action={
-        on && (
-          <button className="link" onClick={test} disabled={state === "sending"}>
-            {state === "sending" ? "sending…" : state === "sent" ? "sent ✓" : state === "error" ? "failed" : "send test"}
-          </button>
-        )
+        <div className="alerts-head">
+          <span className={`alerts-dot ${on ? "on" : "off"}`} />
+          <span className="dim small">{on ? "on" : "off"}</span>
+          {on && (
+            <button className="link" onClick={test} disabled={state === "sending"}>
+              {state === "sending" ? "sending…" : state === "sent" ? "sent ✓" : state === "error" ? "failed" : "send test"}
+            </button>
+          )}
+        </div>
       }
     >
-      {on ? (
-        <p className="dim small">
-          Pinging your channel on: <strong>orders</strong>, <strong>risk-guard blocks</strong>, <strong>errors</strong>, run failures, and end-of-day summaries.
-        </p>
-      ) : (
-        <p className="dim small">
-          Off. Set <span className="mono">DISCORD_WEBHOOK_URL</span> in <span className="mono">.env</span> to get pinged when the bot trades, gets blocked by a risk guard, or finishes its end-of-day review.
-        </p>
+      <p className="dim small" style={{ marginTop: 0 }}>
+        {on ? (
+          <>Pings on <strong>orders</strong>, <strong>risk-guard blocks</strong>, <strong>errors</strong>, run failures &amp; end-of-day summaries.</>
+        ) : (
+          <>Off. Set <span className="mono">DISCORD_WEBHOOK_URL</span> in <span className="mono">.env</span> to enable.</>
+        )}
+      </p>
+      {feed.length > 0 && (
+        <div className="alert-feed">
+          {feed.map((a, i) => (
+            <div key={i} className="alert-row">
+              <span className="alert-time mono">{new Date(a.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+              <span className="alert-title">{a.title}</span>
+              {!a.delivered && <span className="alert-undeliv" title="Recorded but not delivered to Discord">⚠</span>}
+            </div>
+          ))}
+        </div>
       )}
     </Card>
   );
