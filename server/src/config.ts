@@ -53,6 +53,14 @@ export const config = {
     finnhubKey: process.env.FINNHUB_API_KEY ?? "",
   },
 
+  notify: {
+    /** Discord incoming webhook URL (kept in .env, never in code). */
+    discordWebhookUrl: process.env.DISCORD_WEBHOOK_URL ?? "",
+    configured: Boolean(process.env.DISCORD_WEBHOOK_URL),
+    /** Whether to ping when each scheduled/manual run starts (can be noisy). */
+    runStart: bool(process.env.NOTIFY_RUN_START, true),
+  },
+
   schedule: {
     // Master switch for the daily autopilot.
     enabled: bool(process.env.SCHEDULE_ENABLED, true),

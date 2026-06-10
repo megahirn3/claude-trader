@@ -182,6 +182,24 @@ labeled, in the run history and streams live just like a manual run.
 > The server process must be running for the schedule to fire. Keep it up with a
 > process manager (pm2, systemd, a container, etc.) for unattended operation.
 
+## Discord notifications
+
+So you don't have to watch the dashboard, the bot can ping a Discord channel.
+Create an incoming webhook (Channel → Edit → Integrations → Webhooks → New
+Webhook → Copy URL) and set `DISCORD_WEBHOOK_URL` in `.env`. You'll get a message
+for every:
+
+- **Order placed** (🟢) — what it bought/sold and at what size
+- **Risk-guard block** (🛑) — per-trade cap, daily-loss breaker, or day-trade guard
+- **Run error / failure** (⚠️/❌)
+- **Run summary** (✅) — including the daily **end-of-day recap**
+
+A "send test" button on the dashboard's *Discord alerts* card confirms the
+webhook works. Set `NOTIFY_RUN_START=false` to drop the per-run start pings.
+
+The webhook URL is a secret — it lives only in `.env` (git-ignored), never in
+code.
+
 ## Safety
 
 Money is hard to get back, so the design is defensive:

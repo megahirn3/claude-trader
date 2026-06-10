@@ -11,6 +11,7 @@ export interface AppConfig {
   };
   broker: string;
   dataSource: string;
+  notify: { discord: boolean };
   ready: {
     claude: boolean;
     usingSubscription: boolean;
@@ -169,6 +170,11 @@ export const api = {
     const res = await fetch(`/api/schedule/run/${slot}`, { method: "POST" });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Failed to start");
     return (await res.json()).id as string;
+  },
+
+  testNotify: async (): Promise<void> => {
+    const res = await fetch("/api/notify/test", { method: "POST" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Failed to send test");
   },
 };
 

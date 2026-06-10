@@ -57,6 +57,7 @@ export function App() {
           <AccountCards account={account} />
           <EquityChart configured={Boolean(account)} />
           <Schedule cfg={cfg} onRunStarted={(id) => setWatchRequest({ id, n: Date.now() })} />
+          <Alerts cfg={cfg} />
           <Positions positions={positions} />
           <Orders orders={orders} onCancel={refreshPortfolio} />
         </section>
@@ -87,6 +88,7 @@ function Header({ cfg, clock }: { cfg: AppConfig | null; clock: { is_open: boole
             </Pill>
             <Pill ok={cfg.ready.alpaca}>{cfg.ready.alpaca ? `Broker: ${cfg.broker}` : "Broker not configured"}</Pill>
             <Pill muted>data: {cfg.dataSource}</Pill>
+            <Pill ok={cfg.notify.discord} muted={!cfg.notify.discord}>{cfg.notify.discord ? "Discord on" : "Discord off"}</Pill>
             <Pill ok={cfg.trading.mode === "paper"} warn={cfg.trading.liveEnabled}>
               {cfg.trading.liveEnabled ? "LIVE money" : "Paper"}
             </Pill>
@@ -400,6 +402,47 @@ function Schedule({ cfg, onRunStarted }: { cfg: AppConfig | null; onRunStarted: 
             ))}
           </div>
         </>
+      )}
+    </Card>
+  );
+}
+
+// ── Discord alerts ────────────────────────────────────────────────────────────
+
+function Alerts({ cfg }: { cfg: AppConfig | null }) {
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const on = cfg?.notify.discord;
+
+  const test = async () => {
+    setState("sending");
+    try {
+      await api.testNotify();
+      setState("sent");
+    } catch {
+      setState("error");
+    }
+    setTimeout(() => setState("idle"), 2500);
+  };
+
+  return (
+    <Card
+      title="Discord alerts"
+      action={
+        on && (
+          <button className="link" onClick={test} disabled={state === "sending"}>
+            {state === "sending" ? "sending…" : state === "sent" ? "sent ✓" : state === "error" ? "failed" : "send test"}
+          </button>
+        )
+      }
+    >
+      {on ? (
+        <p className="dim small">
+          Pinging your channel on: <strong>orders</strong>, <strong>risk-guard blocks</strong>, <strong>errors</strong>, run failures, and end-of-day summaries.
+        </p>
+      ) : (
+        <p className="dim small">
+          Off. Set <span className="mono">DISCORD_WEBHOOK_URL</span> in <span className="mono">.env</span> to get pinged when the bot trades, gets blocked by a risk guard, or finishes its end-of-day review.
+        </p>
       )}
     </Card>
   );

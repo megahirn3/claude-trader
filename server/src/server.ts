@@ -11,6 +11,7 @@ import { runStore } from "./store.js";
 import { runCycle } from "./agent.js";
 import { startScheduler, scheduleState, setScheduleEnabled, runSlotNow } from "./scheduler.js";
 import { listJournal, getWatchlist } from "./db.js";
+import { sendTestNotification } from "./notify.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -39,6 +40,7 @@ api.get("/config", (_req, res) => {
     },
     broker: broker.name,
     dataSource: marketData.quoteSource(),
+    notify: { discord: config.notify.configured },
     ready: {
       // The agent can run if it has a way to reach Claude via the subscription.
       claude: config.claude.hasOAuthToken || config.claude.hasApiKey,
@@ -102,6 +104,14 @@ api.get("/journal", (req, res) => {
 
 api.get("/watchlist", (_req, res) => {
   res.json(getWatchlist());
+});
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+api.post("/notify/test", async (_req, res) => {
+  if (!config.notify.configured) return res.status(400).json({ error: "DISCORD_WEBHOOK_URL is not set." });
+  const ok = await sendTestNotification();
+  if (!ok) return res.status(502).json({ error: "Failed to post to the Discord webhook — check the URL." });
+  res.json({ ok: true });
 });
 
 api.delete("/orders/:id", async (req, res) => {
@@ -231,6 +241,7 @@ app.listen(config.port, () => {
     console.log(`  ✓ Using Claude subscription (CLAUDE_CODE_OAUTH_TOKEN).`);
   }
   if (!config.alpaca.configured) console.log(`  ⚠ Alpaca keys missing — set ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY.`);
+  console.log(`  Discord alerts: ${config.notify.configured ? "ON" : "off"}`);
   startScheduler();
   console.log("");
 });

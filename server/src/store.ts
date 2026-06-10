@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { db } from "./db.js";
+import { notifyRunStart, notifyRunEvent } from "./notify.js";
 
 /**
  * Run store: SQLite-backed history with an in-memory layer for live runs.
@@ -87,6 +88,7 @@ class RunStore {
     this.active.set(run.id, run);
     this.emitters.set(run.id, new EventEmitter().setMaxListeners(0));
     this.seq.set(run.id, 0);
+    notifyRunStart(run);
     return run;
   }
 
@@ -134,6 +136,8 @@ class RunStore {
       );
     }
     this.emitters.get(id)?.emit("event", event);
+    // Best-effort outbound alerts (orders, risk blocks, errors, summaries).
+    notifyRunEvent(run, event);
   }
 
   finish(id: string, status: RunStatus): void {
