@@ -85,7 +85,8 @@ function Header({ cfg, clock }: { cfg: AppConfig | null; clock: { is_open: boole
             <Pill ok={cfg.ready.usingSubscription} warn={cfg.ready.usingApiKey}>
               {cfg.ready.usingSubscription ? "Subscription" : cfg.ready.usingApiKey ? "API key (billed)" : "No Claude auth"}
             </Pill>
-            <Pill ok={cfg.ready.alpaca}>{cfg.ready.alpaca ? "Alpaca connected" : "Alpaca not configured"}</Pill>
+            <Pill ok={cfg.ready.alpaca}>{cfg.ready.alpaca ? `Broker: ${cfg.broker}` : "Broker not configured"}</Pill>
+            <Pill muted>data: {cfg.dataSource}</Pill>
             <Pill ok={cfg.trading.mode === "paper"} warn={cfg.trading.liveEnabled}>
               {cfg.trading.liveEnabled ? "LIVE money" : "Paper"}
             </Pill>

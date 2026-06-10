@@ -4,7 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import { config } from "./config.js";
-import { alpaca, AlpacaError } from "./alpaca.js";
+import { AlpacaError } from "./alpaca.js";
+import { broker } from "./providers/broker.js";
+import { marketData } from "./providers/marketdata.js";
 import { runStore } from "./store.js";
 import { runCycle } from "./agent.js";
 import { startScheduler, scheduleState, setScheduleEnabled, runSlotNow } from "./scheduler.js";
@@ -35,6 +37,8 @@ api.get("/config", (_req, res) => {
       dailyLossLimitPct: config.trading.dailyLossLimitPct,
       avoidDayTrades: config.trading.avoidDayTrades,
     },
+    broker: broker.name,
+    dataSource: marketData.quoteSource(),
     ready: {
       // The agent can run if it has a way to reach Claude via the subscription.
       claude: config.claude.hasOAuthToken || config.claude.hasApiKey,
@@ -48,7 +52,7 @@ api.get("/config", (_req, res) => {
 // ── Portfolio (read-only passthroughs to Alpaca) ──────────────────────────────
 api.get("/account", async (_req, res) => {
   try {
-    res.json(await alpaca.getAccount());
+    res.json(await broker.getAccount());
   } catch (e) {
     handleAlpacaError(res, e);
   }
@@ -56,7 +60,7 @@ api.get("/account", async (_req, res) => {
 
 api.get("/positions", async (_req, res) => {
   try {
-    res.json(await alpaca.getPositions());
+    res.json(await broker.getPositions());
   } catch (e) {
     handleAlpacaError(res, e);
   }
@@ -65,7 +69,7 @@ api.get("/positions", async (_req, res) => {
 api.get("/orders", async (req, res) => {
   try {
     const status = typeof req.query.status === "string" ? req.query.status : "all";
-    res.json(await alpaca.getOrders({ status, limit: 50 }));
+    res.json(await broker.getOrders({ status, limit: 50 }));
   } catch (e) {
     handleAlpacaError(res, e);
   }
@@ -73,7 +77,7 @@ api.get("/orders", async (req, res) => {
 
 api.get("/clock", async (_req, res) => {
   try {
-    res.json(await alpaca.getClock());
+    res.json(await broker.getClock());
   } catch (e) {
     handleAlpacaError(res, e);
   }
@@ -84,7 +88,7 @@ api.get("/portfolio-history", async (req, res) => {
     const period = typeof req.query.period === "string" ? req.query.period : "1M";
     // Intraday periods need intraday bars; longer periods use daily bars.
     const timeframe = period === "1D" ? "15Min" : "1D";
-    res.json(await alpaca.getPortfolioHistory({ period, timeframe }));
+    res.json(await broker.getPortfolioHistory({ period, timeframe }));
   } catch (e) {
     handleAlpacaError(res, e);
   }
@@ -102,7 +106,7 @@ api.get("/watchlist", (_req, res) => {
 
 api.delete("/orders/:id", async (req, res) => {
   try {
-    await alpaca.cancelOrder(req.params.id);
+    await broker.cancelOrder(req.params.id);
     res.json({ ok: true });
   } catch (e) {
     handleAlpacaError(res, e);

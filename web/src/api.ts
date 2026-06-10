@@ -9,6 +9,8 @@ export interface AppConfig {
     dailyLossLimitPct: number;
     avoidDayTrades: boolean;
   };
+  broker: string;
+  dataSource: string;
   ready: {
     claude: boolean;
     usingSubscription: boolean;

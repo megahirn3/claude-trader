@@ -1,6 +1,8 @@
 import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { alpaca, AlpacaError } from "./alpaca.js";
+import { AlpacaError } from "./alpaca.js";
+import { broker } from "./providers/broker.js";
+import { marketData } from "./providers/marketdata.js";
 import { config } from "./config.js";
 import { runStore } from "./store.js";
 import { addJournalEntry, listJournal, getWatchlist, setWatchlist } from "./db.js";
@@ -33,22 +35,13 @@ function etDate(d: Date | string = new Date()): string {
 }
 
 async function priceFor(symbol: string): Promise<number | null> {
-  try {
-    const snap = (await alpaca.getSnapshots([symbol])) as Record<
-      string,
-      { latestTrade?: { p?: number }; latestQuote?: { ap?: number; bp?: number } }
-    >;
-    const s = snap[symbol];
-    const p = s?.latestTrade?.p ?? s?.latestQuote?.ap ?? s?.latestQuote?.bp;
-    return typeof p === "number" ? p : null;
-  } catch {
-    return null;
-  }
+  const q = await marketData.getQuote(symbol);
+  return q?.price ?? null;
 }
 
 /** True if this symbol had a buy filled today (selling it now would be a day trade). */
 async function boughtToday(symbol: string): Promise<boolean> {
-  const orders = await alpaca.getOrders({ status: "closed", symbols: [symbol], limit: 50 });
+  const orders = await broker.getOrders({ status: "closed", symbols: [symbol], limit: 50 });
   const today = etDate();
   return orders.some(
     (o) =>
@@ -77,7 +70,7 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
       tool("get_account", "Get the brokerage account: cash, equity, buying power, P&L and trading status.", {}, async () => {
         logCall("get_account", {});
         try {
-          const a = await alpaca.getAccount();
+          const a = await broker.getAccount();
           logResult("get_account", `equity $${a.equity}, cash $${a.cash}, buying power $${a.buying_power}`);
           return json(a);
         } catch (e) {
@@ -88,7 +81,7 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
       tool("list_positions", "List all currently held positions with quantity, avg entry, market value and unrealized P&L.", {}, async () => {
         logCall("list_positions", {});
         try {
-          const positions = await alpaca.getPositions();
+          const positions = await broker.getPositions();
           logResult("list_positions", `${positions.length} position(s)`);
           return json(positions);
         } catch (e) {
@@ -103,7 +96,7 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
         async (args) => {
           logCall("list_orders", args);
           try {
-            const orders = await alpaca.getOrders({ status: args.status, limit: 50 });
+            const orders = await broker.getOrders({ status: args.status, limit: 50 });
             logResult("list_orders", `${orders.length} order(s)`);
             return json(orders);
           } catch (e) {
@@ -115,7 +108,7 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
       tool("get_market_clock", "Check whether the US stock market is currently open, and the next open/close times.", {}, async () => {
         logCall("get_market_clock", {});
         try {
-          const clock = await alpaca.getClock();
+          const clock = await broker.getClock();
           logResult("get_market_clock", clock.is_open ? "market OPEN" : "market CLOSED");
           return json(clock);
         } catch (e) {
@@ -130,7 +123,7 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
         async (args) => {
           logCall("get_portfolio_history", args);
           try {
-            const hist = await alpaca.getPortfolioHistory({
+            const hist = await broker.getPortfolioHistory({
               period: args.period,
               timeframe: args.period === "1D" ? "15Min" : "1D",
             });
@@ -143,14 +136,32 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
       ),
 
       tool(
+        "get_quote",
+        "Get the freshest real-time price for one or more symbols (from the configured real-time data source). Use this for current decision prices — it's faster and fresher than the full snapshot.",
+        { symbols: z.array(z.string()).min(1).max(20).describe("Ticker symbols, e.g. ['AAPL','MSFT']") },
+        async (args) => {
+          const symbols = args.symbols.map((s) => s.toUpperCase());
+          logCall("get_quote", { symbols });
+          try {
+            const quotes = await marketData.getQuotes(symbols);
+            const n = Object.keys(quotes).length;
+            logResult("get_quote", `${n} quote(s) via ${marketData.quoteSource()}`);
+            return json({ source: marketData.quoteSource(), quotes });
+          } catch (e) {
+            return fail(errMsg(e));
+          }
+        },
+      ),
+
+      tool(
         "get_stock_snapshot",
-        "Get a real-time snapshot (latest trade, quote, daily/minute bar) for one or more stock symbols.",
+        "Get a fuller snapshot (latest trade, quote, daily/minute bar) for symbols. For just the current price, prefer get_quote.",
         { symbols: z.array(z.string()).min(1).max(20).describe("Ticker symbols, e.g. ['AAPL','MSFT']") },
         async (args) => {
           const symbols = args.symbols.map((s) => s.toUpperCase());
           logCall("get_stock_snapshot", { symbols });
           try {
-            const snaps = await alpaca.getSnapshots(symbols);
+            const snaps = await marketData.getSnapshots(symbols);
             logResult("get_stock_snapshot", `snapshot for ${symbols.join(", ")}`);
             return json(snaps);
           } catch (e) {
@@ -171,7 +182,7 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
           const symbols = args.symbols.map((s) => s.toUpperCase());
           logCall("get_stock_bars", { symbols, timeframe: args.timeframe, limit: args.limit });
           try {
-            const bars = await alpaca.getBars({ symbols, timeframe: args.timeframe, limit: args.limit });
+            const bars = await marketData.getBars({ symbols, timeframe: args.timeframe, limit: args.limit });
             logResult("get_stock_bars", `${args.timeframe} bars for ${symbols.join(", ")}`);
             return json(bars);
           } catch (e) {
@@ -191,7 +202,7 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
           const symbols = args.symbols?.map((s) => s.toUpperCase());
           logCall("get_market_news", { symbols, limit: args.limit });
           try {
-            const news = await alpaca.getNews({ symbols, limit: args.limit });
+            const news = await marketData.getNews({ symbols, limit: args.limit });
             const items = (news.news as Array<{ headline?: string; summary?: string; source?: string; created_at?: string; symbols?: string[] }>) ?? [];
             // Trim to the essentials to keep the agent's context lean.
             const trimmed = items.map((n) => ({
@@ -329,7 +340,7 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
 
             let acct;
             try {
-              acct = await alpaca.getAccount();
+              acct = await broker.getAccount();
             } catch (e) {
               return fail(`Couldn't read account to size the order: ${errMsg(e)}`);
             }
@@ -370,7 +381,7 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
 
           // ── Submit ───────────────────────────────────────────────────────
           try {
-            const order = await alpaca.placeOrder({
+            const order = await broker.placeOrder({
               symbol,
               side: args.side,
               type: args.type,
@@ -404,7 +415,7 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
         async (args) => {
           logCall("cancel_order", args);
           try {
-            await alpaca.cancelOrder(args.order_id);
+            await broker.cancelOrder(args.order_id);
             logResult("cancel_order", `cancelled ${args.order_id}`);
             return ok(`Order ${args.order_id} cancelled.`);
           } catch (e) {
@@ -423,6 +434,7 @@ export const ALPACA_TOOL_NAMES = [
   "list_orders",
   "get_market_clock",
   "get_portfolio_history",
+  "get_quote",
   "get_stock_snapshot",
   "get_stock_bars",
   "get_market_news",

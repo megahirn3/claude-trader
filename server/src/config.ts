@@ -48,6 +48,11 @@ export const config = {
     avoidDayTrades: bool(process.env.AVOID_DAY_TRADES, true),
   },
 
+  data: {
+    /** Optional Finnhub API key — enables free real-time US quotes for decisions. */
+    finnhubKey: process.env.FINNHUB_API_KEY ?? "",
+  },
+
   schedule: {
     // Master switch for the daily autopilot.
     enabled: bool(process.env.SCHEDULE_ENABLED, true),

@@ -36,6 +36,26 @@ data, news, decision logging, order placement) plus the built-in **WebSearch /
 WebFetch** tools for open-web research. Claude runs an agentic loop: assess →
 research → decide → act, streaming every step to the dashboard.
 
+### Vendor-agnostic broker & data layer
+
+Market access sits behind two clean interfaces — **`Broker`** (execution +
+account) and **`MarketData`** (real-time quotes, bars, news) — so the bot is not
+locked to any one vendor:
+
+- **Broker → Alpaca** today (a real, ToS-compliant brokerage that works for
+  German/EU residents, with fractional shares and real-time fills). An
+  Interactive Brokers adapter can implement the same `Broker` interface later
+  without touching the agent, tools, or scheduler.
+- **Market data → Finnhub** for free real-time US quotes when `FINNHUB_API_KEY`
+  is set, with **Alpaca's real-time IEX feed** as the always-available fallback.
+  Upgrading to a paid consolidated (SIP) feed later is a one-line config change.
+
+> **On "delayed data":** order *execution* is always real-time. And the price
+> feed the bot reads is real-time too — Alpaca's free **IEX** feed is real-time
+> (just thin, ~2% of volume); the 15-minute delay only applies to the free
+> **SIP** feed, which the bot doesn't use. Adding a Finnhub key broadens
+> real-time coverage for free.
+
 **Why this works without the API:** when `CLAUDE_CODE_OAUTH_TOKEN` is set and
 `ANTHROPIC_API_KEY` is **not**, the Agent SDK draws from your subscription. (If
 both are set, the API key wins and you get billed — so leave it unset.)
@@ -109,6 +129,7 @@ npm start         # serves API + frontend from http://localhost:8787
 | Real-time quotes & snapshots | `get_stock_snapshot` |
 | Historical bars (technicals) | `get_stock_bars` |
 | Market news headlines | `get_market_news` |
+| Real-time quote (fresh decision price) | `get_quote` |
 | Open-web research | `WebSearch`, `WebFetch` |
 | **Remember across cycles** (journal) | `read_journal`, `write_journal` |
 | **Track candidates** (watchlist) | `get_watchlist`, `set_watchlist` |
@@ -138,7 +159,7 @@ holidays are skipped automatically via Alpaca's calendar). All times are in
 
 | Time (ET) | Slot | Trades? | Purpose |
 |---|---|---|---|
-| **10:00** | Morning review | ✅ | Opening volatility has settled and the free 15‑min‑delayed data is meaningful — react to overnight news/gaps and set the day's plan |
+| **10:00** | Morning review | ✅ | Opening volatility has settled — react to overnight news/gaps and set the day's plan |
 | **12:30** | Midday check | ✅ | Confirm the morning thesis held; catch midday catalysts; trim/add |
 | **15:45** | Pre‑close positioning | ✅ | Last actionable window — take profits, cut losers, manage overnight risk |
 | **16:15** | End‑of‑day summary | ❌ **review only** | Market closed; final bars in — full‑day P&L recap, movers, what it did, watchlist for tomorrow |
@@ -199,7 +220,8 @@ claude-trader/
 ├── server/                 # Express API + Claude Agent driver
 │   └── src/
 │       ├── config.ts       # env, trading-mode + safety resolution
-│       ├── alpaca.ts        # Alpaca REST client (trading + market data)
+│       ├── alpaca.ts        # Alpaca REST client (low-level)
+│       ├── providers/      # vendor-agnostic Broker + MarketData adapters
 │       ├── tools.ts         # Claude tools (the agent's hands)
 │       ├── agent.ts         # Agent SDK query loop + system prompt
 │       ├── db.ts            # SQLite (runs, journal, watchlist, state)
