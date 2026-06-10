@@ -1,4 +1,13 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Load .env robustly regardless of where the process was started from. In
+// production the app runs from the server/ workspace (npm start), but the
+// documented .env lives at the repo root — load both, root filling any gaps.
+dotenv.config(); // cwd/.env (e.g. when run from the repo root in dev)
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../");
+dotenv.config({ path: path.join(repoRoot, ".env") }); // repo-root .env (production)
 
 function bool(value: string | undefined, fallback = false): boolean {
   if (value === undefined) return fallback;

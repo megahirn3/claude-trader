@@ -115,6 +115,14 @@ npm run build     # builds the frontend
 npm start         # serves API + frontend from http://localhost:8787
 ```
 
+### Deploy on a server (unattended)
+
+To run the bot 24/7 on a small VPS with auto-restart and **no secrets in git**,
+see **[deploy/README.md](deploy/README.md)** — it's a one-command setup:
+```bash
+bash deploy/setup.sh   # installs Node + Claude CLI, builds, installs a systemd service
+```
+
 ---
 
 ## What the agent can do

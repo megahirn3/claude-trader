@@ -1,0 +1,24 @@
+[Unit]
+Description=Claude Trader — autonomous trading bot
+Documentation=https://github.com/megahirn3/claude-trader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__ROOT__
+# The app reads secrets from __ROOT__/.env itself (never from this unit file),
+# so no API keys are ever stored in systemd.
+Environment=NODE_ENV=production
+Environment=PATH=__PATH__
+ExecStart=__NPM__ start
+Restart=on-failure
+RestartSec=10
+# Light hardening — the bot needs no special privileges.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
