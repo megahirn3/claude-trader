@@ -11,6 +11,9 @@ import {
   type RunSummary,
   type ScheduleState,
   type ScheduleSlot,
+  type PortfolioHistory,
+  type JournalEntry,
+  type WatchlistItem,
 } from "./api";
 
 export function App() {
@@ -52,12 +55,14 @@ export function App() {
       <main>
         <section className="left">
           <AccountCards account={account} />
+          <EquityChart configured={Boolean(account)} />
           <Schedule cfg={cfg} onRunStarted={(id) => setWatchRequest({ id, n: Date.now() })} />
           <Positions positions={positions} />
           <Orders orders={orders} onCancel={refreshPortfolio} />
         </section>
         <section className="right">
           <AgentPanel cfg={cfg} watchRequest={watchRequest} onPortfolioMayHaveChanged={refreshPortfolio} />
+          <JournalCard />
         </section>
       </main>
     </div>
@@ -122,6 +127,131 @@ function Stat({ label, value, sub, positive }: { label: string; value: string; s
       <div className="stat-value">{value}</div>
       {sub && <div className={`stat-sub ${positive ? "up" : "down"}`}>{sub}</div>}
     </div>
+  );
+}
+
+// ── Equity chart ──────────────────────────────────────────────────────────────
+
+const PERIODS = ["1D", "1W", "1M", "3M"] as const;
+
+function EquityChart({ configured }: { configured: boolean }) {
+  const [period, setPeriod] = useState<(typeof PERIODS)[number]>("1M");
+  const [hist, setHist] = useState<PortfolioHistory | null>(null);
+
+  useEffect(() => {
+    if (!configured) return;
+    api.history(period).then(setHist).catch(() => setHist(null));
+  }, [period, configured]);
+
+  if (!configured) return null;
+
+  const points = (hist?.equity ?? []).filter((v): v is number => typeof v === "number" && v > 0);
+  const first = points[0];
+  const last = points[points.length - 1];
+  const change = first && last ? (last - first) / first : 0;
+  const up = change >= 0;
+
+  // Map equity points into a 600x150 viewBox with a little vertical padding.
+  const W = 600;
+  const H = 150;
+  const PAD = 8;
+  let path = "";
+  if (points.length >= 2) {
+    const min = Math.min(...points);
+    const max = Math.max(...points);
+    const span = max - min || 1;
+    path = points
+      .map((v, i) => {
+        const x = (i / (points.length - 1)) * W;
+        const y = PAD + (1 - (v - min) / span) * (H - PAD * 2);
+        return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
+  }
+
+  return (
+    <Card
+      title="Equity"
+      action={
+        <div className="periods">
+          {PERIODS.map((p) => (
+            <button key={p} className={`period ${p === period ? "active" : ""}`} onClick={() => setPeriod(p)}>
+              {p}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {points.length < 2 ? (
+        <p className="dim">Not enough history yet — check back after a few trading days.</p>
+      ) : (
+        <>
+          <div className="chart-head">
+            <span className="chart-value">{usd(last)}</span>
+            <span className={`chart-change ${up ? "up" : "down"}`}>
+              {up ? "+" : ""}
+              {usd(last - first)} ({pct(change)})
+            </span>
+          </div>
+          <svg className="chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="eqfill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={up ? "var(--up)" : "var(--down)"} stopOpacity="0.25" />
+                <stop offset="100%" stopColor={up ? "var(--up)" : "var(--down)"} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={`${path} L${W},${H} L0,${H} Z`} fill="url(#eqfill)" stroke="none" />
+            <path d={path} fill="none" stroke={up ? "var(--up)" : "var(--down)"} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+          </svg>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ── Journal & watchlist (the agent's memory) ─────────────────────────────────
+
+function JournalCard() {
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [watchlist, setWatchlistState] = useState<WatchlistItem[]>([]);
+
+  useEffect(() => {
+    const load = () => {
+      api.journal(6).then(setEntries).catch(() => {});
+      api.watchlist().then(setWatchlistState).catch(() => {});
+    };
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <Card title="Agent journal">
+      {watchlist.length > 0 && (
+        <div className="watchlist">
+          {watchlist.map((w) => (
+            <span key={w.symbol} className="watch-chip" title={w.note}>
+              {w.symbol}
+            </span>
+          ))}
+        </div>
+      )}
+      {entries.length === 0 ? (
+        <p className="dim">No journal entries yet — the agent writes a handoff note at the end of every cycle.</p>
+      ) : (
+        <div className="journal-list">
+          {entries.map((e) => (
+            <div key={e.id} className="journal-entry">
+              <div className="journal-meta">
+                <span className="journal-label">{e.label}</span>
+                <span className="dim small">{new Date(e.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+              </div>
+              <div className="journal-content">{e.content}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -497,6 +627,13 @@ function EventRow({ event }: { event: RunEvent }) {
         <div className="event order">
           <div className="event-tag order-tag">ORDER</div>
           <div className="event-body strong">{event.summary}</div>
+        </div>
+      );
+    case "journal":
+      return (
+        <div className="event journal-event">
+          <div className="event-tag">journal</div>
+          <div className="event-body">{event.text}</div>
         </div>
       );
     case "error":

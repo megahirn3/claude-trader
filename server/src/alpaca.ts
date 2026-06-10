@@ -94,6 +94,7 @@ export interface AlpacaOrder {
   status: string;
   filled_qty: string;
   filled_avg_price: string | null;
+  filled_at: string | null;
   created_at: string;
   submitted_at: string;
 }
@@ -114,11 +115,13 @@ export const alpaca = {
     return request<Array<{ date: string; open: string; close: string }>>(trading(`/v2/calendar?${q.toString()}`));
   },
 
-  getOrders: (params: { status?: string; limit?: number } = {}) => {
+  getOrders: (params: { status?: string; limit?: number; after?: string; symbols?: string[] } = {}) => {
     const q = new URLSearchParams();
     q.set("status", params.status ?? "all");
     q.set("limit", String(params.limit ?? 50));
     q.set("direction", "desc");
+    if (params.after) q.set("after", params.after);
+    if (params.symbols?.length) q.set("symbols", params.symbols.join(","));
     return request<AlpacaOrder[]>(trading(`/v2/orders?${q.toString()}`));
   },
 
@@ -141,11 +144,12 @@ export const alpaca = {
   placeOrder: (order: {
     symbol: string;
     side: "buy" | "sell";
-    type: "market" | "limit";
+    type: "market" | "limit" | "stop" | "stop_limit";
     time_in_force: "day" | "gtc";
     qty?: number;
     notional?: number;
     limit_price?: number;
+    stop_price?: number;
   }) =>
     request<AlpacaOrder>(trading("/v2/orders"), {
       method: "POST",

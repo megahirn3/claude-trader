@@ -103,17 +103,30 @@ npm start         # serves API + frontend from http://localhost:8787
 |---|---|
 | Read account, cash, buying power, P&L | `get_account` |
 | Inspect positions | `list_positions` |
-| Check open/closed orders | `list_orders` |
+| Check open/closed orders (incl. stops) | `list_orders` |
 | See if the market is open | `get_market_clock` |
+| Equity curve / how the account is doing | `get_portfolio_history` |
 | Real-time quotes & snapshots | `get_stock_snapshot` |
 | Historical bars (technicals) | `get_stock_bars` |
 | Market news headlines | `get_market_news` |
 | Open-web research | `WebSearch`, `WebFetch` |
+| **Remember across cycles** (journal) | `read_journal`, `write_journal` |
+| **Track candidates** (watchlist) | `get_watchlist`, `set_watchlist` |
 | Log a thesis for human review | `record_decision` |
-| Place / cancel orders | `place_order`, `cancel_order` |
+| Place / cancel orders (incl. protective stop‑losses) | `place_order`, `cancel_order` |
 
 The agent is **explicitly denied** filesystem and shell access — it can only
 research and trade.
+
+## Agent memory: the trading journal
+
+Each run wakes up fresh — so the bot keeps a **journal** (persisted in SQLite).
+Every cycle starts by reading the last entries and ends by writing a handoff
+note: thesis per holding, what it did and why, levels to watch, plan for the
+next run. That means the 10:00 plan actually informs the 12:30 and 15:45 runs,
+and the end‑of‑day review builds on the whole day instead of reconstructing it.
+The agent also maintains a **watchlist** of candidate names with notes. Both are
+visible on the dashboard, and both survive restarts.
 
 ---
 
@@ -161,9 +174,17 @@ Money is hard to get back, so the design is defensive:
    every **buy** at that share of your *current* portfolio value — e.g. 5% of a
    $2,000 account is $100/trade — enforced server-side before any order is sent.
    It scales as your account grows, and sells are never size-capped.
-4. **Decisions are logged before action.** The agent calls `record_decision`
+4. **Daily-loss circuit breaker.** If the account is down
+   `DAILY_LOSS_LIMIT_PCT` (default `3%`) vs yesterday's close, all new buys are
+   blocked for the rest of the day. The agent can still sell to reduce risk.
+5. **Day-trade guard.** With `AVOID_DAY_TRADES=true` (default) the server blocks
+   selling any position bought the same day — keeping a sub‑$25k account clear
+   of Pattern-Day-Trader restrictions (margin) and good-faith violations (cash).
+6. **Protective stops.** The agent is encouraged to place GTC stop-loss orders
+   under its positions, so downside is bounded even between scheduled runs.
+7. **Decisions are logged before action.** The agent calls `record_decision`
    with its rationale, visible in the dashboard, before placing orders.
-5. **Buying-power limits** are enforced by Alpaca itself.
+8. **Buying-power limits** are enforced by Alpaca itself.
 
 Before going live: run in paper for a good while, review the decision logs, set a
 conservative cap, and start small. **You are responsible for any trades placed.**
@@ -181,7 +202,9 @@ claude-trader/
 │       ├── alpaca.ts        # Alpaca REST client (trading + market data)
 │       ├── tools.ts         # Claude tools (the agent's hands)
 │       ├── agent.ts         # Agent SDK query loop + system prompt
-│       ├── store.ts         # in-memory run/event store (+ SSE)
+│       ├── db.ts            # SQLite (runs, journal, watchlist, state)
+│       ├── store.ts         # run/event store (SQLite + live SSE layer)
+│       ├── scheduler.ts     # daily autopilot (market-time slots)
 │       └── server.ts        # HTTP routes & SSE streaming
 └── web/                    # React + Vite dashboard
     └── src/
@@ -213,8 +236,9 @@ claude-trader/
 
 ## Notes & limitations
 
-- **In-memory state.** Run history is kept in process memory; restarting the
-  server clears it. Swap `store.ts` for a database to persist.
+- **Persistence.** Run history, the agent journal, the watchlist and scheduler
+  state live in SQLite (Node's built-in `node:sqlite`, zero native deps) under
+  `server/data/`. Delete the folder to reset.
 - **Market data feed.** Uses Alpaca's free IEX feed. A paid SIP subscription
   gives fuller coverage; adjust `feed` in `alpaca.ts`.
 - **Not financial advice.** An LLM can be wrong, overconfident, or misread data.

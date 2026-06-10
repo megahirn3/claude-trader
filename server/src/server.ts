@@ -8,6 +8,7 @@ import { alpaca, AlpacaError } from "./alpaca.js";
 import { runStore } from "./store.js";
 import { runCycle } from "./agent.js";
 import { startScheduler, scheduleState, setScheduleEnabled, runSlotNow } from "./scheduler.js";
+import { listJournal, getWatchlist } from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -31,6 +32,8 @@ api.get("/config", (_req, res) => {
       mode: config.trading.mode,
       liveEnabled: config.trading.liveEnabled,
       maxTradePct: config.trading.maxTradePct,
+      dailyLossLimitPct: config.trading.dailyLossLimitPct,
+      avoidDayTrades: config.trading.avoidDayTrades,
     },
     ready: {
       // The agent can run if it has a way to reach Claude via the subscription.
@@ -79,10 +82,22 @@ api.get("/clock", async (_req, res) => {
 api.get("/portfolio-history", async (req, res) => {
   try {
     const period = typeof req.query.period === "string" ? req.query.period : "1M";
-    res.json(await alpaca.getPortfolioHistory({ period }));
+    // Intraday periods need intraday bars; longer periods use daily bars.
+    const timeframe = period === "1D" ? "15Min" : "1D";
+    res.json(await alpaca.getPortfolioHistory({ period, timeframe }));
   } catch (e) {
     handleAlpacaError(res, e);
   }
+});
+
+// ── Journal & watchlist (the agent's memory) ─────────────────────────────────
+api.get("/journal", (req, res) => {
+  const limit = Math.min(Number(req.query.limit ?? 8) || 8, 50);
+  res.json(listJournal(limit));
+});
+
+api.get("/watchlist", (_req, res) => {
+  res.json(getWatchlist());
 });
 
 api.delete("/orders/:id", async (req, res) => {

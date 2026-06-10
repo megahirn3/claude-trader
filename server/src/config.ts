@@ -42,6 +42,10 @@ export const config = {
     allowLiveTrading,
     /** Max share of current portfolio value any single trade may use, in percent. */
     maxTradePct: Number(process.env.MAX_TRADE_PCT ?? 5),
+    /** Block new buys when today's equity drawdown exceeds this percentage. */
+    dailyLossLimitPct: Number(process.env.DAILY_LOSS_LIMIT_PCT ?? 3),
+    /** Block sells that would round-trip a position opened the same day (PDT / good-faith protection). */
+    avoidDayTrades: bool(process.env.AVOID_DAY_TRADES, true),
   },
 
   schedule: {

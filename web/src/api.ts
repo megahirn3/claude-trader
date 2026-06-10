@@ -2,7 +2,13 @@
 
 export interface AppConfig {
   model: string;
-  trading: { mode: "paper" | "live"; liveEnabled: boolean; maxTradePct: number };
+  trading: {
+    mode: "paper" | "live";
+    liveEnabled: boolean;
+    maxTradePct: number;
+    dailyLossLimitPct: number;
+    avoidDayTrades: boolean;
+  };
   ready: {
     claude: boolean;
     usingSubscription: boolean;
@@ -83,8 +89,29 @@ export type RunEvent =
   | { kind: "tool_result"; tool: string; summary: string; at: string }
   | { kind: "decision"; action: string; symbol?: string; rationale: string; at: string }
   | { kind: "order"; summary: string; detail: unknown; at: string }
+  | { kind: "journal"; text: string; at: string }
   | { kind: "error"; message: string; at: string }
   | { kind: "result"; summary: string; costUsd?: number; numTurns?: number; at: string };
+
+export interface PortfolioHistory {
+  timestamp: number[];
+  equity: (number | null)[];
+  profit_loss: number[];
+  profit_loss_pct: number[];
+  base_value: number;
+}
+
+export interface JournalEntry {
+  id: number;
+  at: string;
+  label: string;
+  content: string;
+}
+
+export interface WatchlistItem {
+  symbol: string;
+  note: string;
+}
 
 export interface Run extends RunSummary {
   events: RunEvent[];
@@ -120,6 +147,10 @@ export const api = {
     const res = await fetch(`/api/orders/${id}`, { method: "DELETE" });
     if (!res.ok) throw new Error("Failed to cancel order");
   },
+
+  history: (period: string) => get<PortfolioHistory>(`/api/portfolio-history?period=${encodeURIComponent(period)}`),
+  journal: (limit = 8) => get<JournalEntry[]>(`/api/journal?limit=${limit}`),
+  watchlist: () => get<WatchlistItem[]>("/api/watchlist"),
 
   schedule: () => get<ScheduleState>("/api/schedule"),
 

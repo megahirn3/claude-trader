@@ -91,6 +91,33 @@ td { padding: 8px; border-top: 1px solid var(--border); font-variant-numeric: ta
 .link { background: none; border: none; color: var(--accent-2); cursor: pointer; font-size: 12px; padding: 0; }
 .link:hover { text-decoration: underline; }
 
+/* Equity chart */
+.periods { display: flex; gap: 4px; }
+.period {
+  background: var(--panel-2); color: var(--dim); border: 1px solid var(--border);
+  border-radius: 7px; padding: 3px 9px; font-size: 11.5px; cursor: pointer;
+}
+.period.active { color: var(--text); border-color: var(--accent-2); }
+.chart-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.chart-value { font-size: 20px; font-weight: 680; }
+.chart-change { font-size: 13px; }
+.chart { width: 100%; height: 130px; display: block; }
+
+/* Journal & watchlist */
+.watchlist { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.watch-chip {
+  font-size: 12px; font-weight: 650; font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  padding: 3px 10px; border-radius: 999px; cursor: default;
+  background: #15243a; color: var(--accent-2); border: 1px solid #243349;
+}
+.journal-list { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; }
+.journal-entry { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.journal-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.journal-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); font-weight: 700; }
+.journal-content { font-size: 13px; white-space: pre-wrap; word-break: break-word; color: var(--text); }
+.event.journal-event { background: #1d1a12; border: 1px solid #4a3a16; border-radius: 8px; padding: 8px 10px; }
+.event.journal-event .event-tag { color: var(--accent); }
+
 /* Schedule */
 .toggle {
   font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer;
@@ -113,8 +140,8 @@ td { padding: 8px; border-top: 1px solid var(--border); font-variant-numeric: ta
 .badge.review { color: var(--accent-2); background: #15243a; border: 1px solid #243349; }
 
 /* Agent panel */
-.right .card { display: flex; flex-direction: column; min-height: 640px; }
-.right .card-body { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; }
+.right .card:first-child { display: flex; flex-direction: column; min-height: 560px; }
+.right .card:first-child .card-body { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; }
 .agent-controls { display: flex; flex-direction: column; gap: 10px; }
 textarea {
   width: 100%; resize: vertical; background: var(--panel-2); color: var(--text);

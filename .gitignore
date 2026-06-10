@@ -8,3 +8,5 @@ build/
 web/dist/
 server/dist/
 .claude/settings.local.json
+data/
+server/data/

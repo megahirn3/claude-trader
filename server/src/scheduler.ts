@@ -2,6 +2,7 @@ import { config, type ScheduleSlot } from "./config.js";
 import { alpaca } from "./alpaca.js";
 import { runStore } from "./store.js";
 import { runCycle } from "./agent.js";
+import { kvGet, kvSet } from "./db.js";
 
 /**
  * Daily autopilot. Ticks every 30s, and when the wall-clock time in US market
@@ -9,20 +10,25 @@ import { runCycle } from "./agent.js";
  * corresponding agent cycle exactly once. Weekends and holidays are skipped via
  * Alpaca's trading calendar.
  *
- * State (last-fired day, last run) is in-memory; restarting resets it, which is
- * safe because the per-day guard keys on the calendar date.
+ * The per-day fire guard and the on/off toggle are persisted in SQLite, so a
+ * restart can neither double-fire a slot nor forget that you switched the
+ * autopilot off.
  */
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 interface SlotState {
-  lastFiredDate?: string; // ET date string we last fired on (guards against double-fire)
   lastRunAt?: string;
   lastRunId?: string;
 }
 
 const state = new Map<string, SlotState>();
 let timer: NodeJS.Timeout | null = null;
+
+// Per-day fire guard, persisted so restarts can't double-fire a slot.
+const firedKey = (slotId: string) => `sched:fired:${slotId}`;
+const lastFiredDate = (slotId: string) => kvGet(firedKey(slotId));
+const markFired = (slotId: string, etDate: string) => kvSet(firedKey(slotId), etDate);
 
 /** Current time in market timezone, as plain calendar fields. */
 function nowMarket(): { date: string; hhmm: string; weekday: number } {
@@ -91,8 +97,7 @@ function promptFor(slot: ScheduleSlot): string {
 }
 
 async function fire(slot: ScheduleSlot, etDate: string): Promise<void> {
-  const s = state.get(slot.id) ?? {};
-  state.set(slot.id, { ...s, lastFiredDate: etDate }); // guard synchronously before any await
+  markFired(slot.id, etDate); // guard synchronously (and durably) before any await
 
   if (!(await isTradingDay(etDate))) {
     console.log(`[scheduler] ${etDate} is not a trading day — skipping "${slot.label}".`);
@@ -100,7 +105,7 @@ async function fire(slot: ScheduleSlot, etDate: string): Promise<void> {
   }
 
   const run = runStore.create(promptFor(slot), config.trading.mode, slot.label);
-  state.set(slot.id, { lastFiredDate: etDate, lastRunAt: run.startedAt, lastRunId: run.id });
+  state.set(slot.id, { lastRunAt: run.startedAt, lastRunId: run.id });
   console.log(`[scheduler] firing "${slot.label}" (${slot.time} ET) → run ${run.id}`);
   void runCycle(run, run.prompt, { allowTrading: slot.allowTrading });
 }
@@ -111,13 +116,16 @@ function tick(): void {
   for (const slot of config.schedule.slots) {
     if (!slot.enabled) continue;
     if (m.hhmm !== slot.time) continue;
-    if (state.get(slot.id)?.lastFiredDate === m.date) continue;
+    if (lastFiredDate(slot.id) === m.date) continue;
     void fire(slot, m.date);
   }
 }
 
 export function startScheduler(): void {
   if (timer) return;
+  // Restore the autopilot toggle from the database (dashboard changes persist).
+  const persisted = kvGet("schedule:enabled");
+  if (persisted !== null) (config.schedule as { enabled: boolean }).enabled = persisted === "true";
   timer = setInterval(tick, 30_000);
   const active = config.schedule.slots.filter((s) => s.enabled).map((s) => `${s.time} ${s.label}`);
   if (config.schedule.enabled && active.length) {
@@ -146,9 +154,10 @@ export function scheduleState() {
   };
 }
 
-/** Enable/disable the autopilot at runtime (overrides the env default until restart). */
+/** Enable/disable the autopilot at runtime. Persisted, so it survives restarts. */
 export function setScheduleEnabled(enabled: boolean): void {
   (config.schedule as { enabled: boolean }).enabled = enabled;
+  kvSet("schedule:enabled", String(enabled));
 }
 
 /** Trigger a slot's cycle immediately (used by the "Run now" buttons). */

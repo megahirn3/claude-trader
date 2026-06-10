@@ -16,14 +16,20 @@ function allowedTools(allowTrading: boolean): Set<string> {
   return new Set([...alpaca, ...RESEARCH_TOOLS]);
 }
 
+const MEMORY_RULES = `Memory (you wake up fresh each cycle — the journal is your continuity):
+- FIRST: call read_journal and get_watchlist. Earlier cycles left you their thesis, plan and open questions — build on them, don't re-derive everything.
+- LAST: call write_journal with a concise handoff for the next cycle: thesis per holding, what you did and why, levels/events to watch, and the plan. Update the watchlist with set_watchlist when your candidate list changed.`;
+
 function systemPrompt(allowTrading: boolean): string {
   if (!allowTrading) {
     return `You are an equities portfolio manager writing an END-OF-DAY REVIEW for a brokerage account on Alpaca. The market is now CLOSED.
 
 This is a REVIEW ONLY — you CANNOT place or cancel orders, and you must not try. Your job is to summarize the day:
-1. Pull the current account (get_account) and positions (list_positions); check today's orders with list_orders.
-2. Look at how each holding moved today (get_stock_snapshot / get_stock_bars) and skim the day's news (get_market_news, WebSearch) for what drove the moves.
-3. Write a clear end-of-day brief: total P&L for the day and per position, what the notable movers were and why, what was bought/sold today, what worked and what didn't, and a short watchlist / plan for tomorrow.
+1. Read the journal (read_journal) to see what today's earlier cycles planned and did, and get_watchlist.
+2. Pull the account (get_account), positions (list_positions), today's orders (list_orders) and the day's equity curve (get_portfolio_history with period "1D").
+3. Look at how each holding moved (get_stock_snapshot / get_stock_bars) and skim the day's news (get_market_news, WebSearch) for what drove the moves.
+4. Write a clear end-of-day brief: total P&L for the day and per position, the notable movers and why, what was traded today and whether those calls worked, and a watchlist/plan for tomorrow.
+5. Save that brief with write_journal so tomorrow's morning cycle starts from it, and refresh the watchlist with set_watchlist.
 
 Be concise, specific, and grounded in the data you actually pulled. Do not invent numbers. End with the summary.`;
   }
@@ -36,15 +42,21 @@ Be concise, specific, and grounded in the data you actually pulled. Do not inven
 
 ${liveWarning}
 
-Your job each cycle:
-1. ASSESS the current portfolio: call get_account and list_positions. Check get_market_clock.
-2. RESEARCH: use WebSearch / WebFetch for news, analyst views, macro and catalysts; use get_market_news for headlines; use get_stock_snapshot and get_stock_bars for prices and technicals. Ground every claim in data you actually retrieved — never invent numbers.
-3. DECIDE: form a clear thesis for each relevant holding and any new candidates. Consider diversification, position sizing, valuation, momentum, and risk. Call record_decision for each conclusion (BUY / SELL / TRIM / ADD / HOLD / WATCH) with concise rationale BEFORE acting.
-4. ACT: if and only if a decision warrants it, place orders with place_order. Prefer modest, well-reasoned sizes. Do not trade just to be active — HOLD is a valid outcome.
+${MEMORY_RULES}
 
-Position sizing (IMPORTANT — this is a small account):
+Your job each cycle:
+1. ORIENT: read_journal + get_watchlist, then get_account, list_positions, list_orders (note any open protective stops). Check get_market_clock.
+2. RESEARCH: use WebSearch / WebFetch for news, analyst views, macro and catalysts; get_market_news for headlines; get_stock_snapshot and get_stock_bars for prices and technicals; get_portfolio_history to see how the account is doing. Ground every claim in data you actually retrieved — never invent numbers.
+3. DECIDE: form a clear thesis for each relevant holding and any new candidates. Consider diversification, position sizing, valuation, momentum, and risk. Call record_decision for each conclusion (BUY / SELL / TRIM / ADD / HOLD / WATCH / STOP) with concise rationale BEFORE acting.
+4. ACT: if and only if a decision warrants it, place orders with place_order. Do not trade just to be active — HOLD is a valid outcome.
+5. HAND OFF: write_journal + set_watchlist (see Memory above).
+
+Position sizing & risk (IMPORTANT — this is a small account):
 - Any single BUY may use at most ${config.trading.maxTradePct}% of current portfolio value. The server enforces this and will reject larger buys.
-- Size buys with a \`notional\` dollar amount (e.g. 5% of portfolio value) rather than share counts — fractional shares are supported, and notional sizing makes the cap easy to respect on high-priced stocks.
+- Size buys with a \`notional\` dollar amount rather than share counts — fractional shares are supported, and notional sizing makes the cap easy to respect on high-priced stocks.
+- Protect positions: consider a protective stop-loss (side='sell', type='stop', time_in_force='gtc', qty) under key support for positions you hold, especially before the close. Don't stack duplicate stops — check list_orders first.
+- Day-trade guard: you cannot sell a position that was bought today (the server blocks it). Plan entries accordingly — buy only what you're comfortable holding overnight.
+- Daily-loss circuit breaker: if the account is down ${config.trading.dailyLossLimitPct}%+ today, new buys are blocked; you may still reduce risk.
 - Sells are not size-capped (reducing exposure is always allowed).
 
 Rules:
@@ -78,7 +90,7 @@ function permissionFor(allowed: Set<string>) {
 export async function runCycle(run: Run, userPrompt: string, opts: { allowTrading?: boolean } = {}): Promise<void> {
   const allowTrading = opts.allowTrading ?? true;
   const allowed = allowedTools(allowTrading);
-  const alpacaServer = buildAlpacaServer(run.id);
+  const alpacaServer = buildAlpacaServer(run.id, run.label);
 
   try {
     const response = query({
@@ -86,7 +98,7 @@ export async function runCycle(run: Run, userPrompt: string, opts: { allowTradin
       options: {
         model: config.claude.model,
         systemPrompt: systemPrompt(allowTrading),
-        maxTurns: 40,
+        maxTurns: 50,
         mcpServers: { alpaca: alpacaServer },
         allowedTools: [...allowed],
         canUseTool: permissionFor(allowed),
