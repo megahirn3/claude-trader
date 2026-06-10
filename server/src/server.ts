@@ -46,8 +46,8 @@ api.get("/config", (_req, res) => {
     halted: isHalted(),
     ready: {
       // The agent can run if it has a way to reach Claude via the subscription.
-      claude: config.claude.hasOAuthToken || config.claude.hasApiKey,
-      usingSubscription: config.claude.hasOAuthToken && !config.claude.hasApiKey,
+      claude: config.claude.ready,
+      usingSubscription: (config.claude.hasOAuthToken || config.claude.hasCliLogin) && !config.claude.hasApiKey,
       usingApiKey: config.claude.hasApiKey,
       alpaca: config.alpaca.configured,
     },
@@ -143,10 +143,10 @@ const DEFAULT_PROMPT =
   "Run a full portfolio review cycle: assess my current holdings and cash, research the market and my positions, decide on any changes, and execute prudent trades within the safety limits. Then summarize what you did.";
 
 api.post("/runs", (req, res) => {
-  if (!config.claude.hasOAuthToken && !config.claude.hasApiKey) {
+  if (!config.claude.ready) {
     return res.status(400).json({
       error:
-        "No Claude credentials. Run `npm run setup-token` to mint a subscription token and set CLAUDE_CODE_OAUTH_TOKEN.",
+        "No Claude credentials. Log in with the `claude` CLI on this machine, or set CLAUDE_CODE_OAUTH_TOKEN.",
     });
   }
   if (!config.alpaca.configured) {
@@ -168,8 +168,8 @@ api.post("/schedule", (req, res) => {
 });
 
 api.post("/schedule/run/:slot", (req, res) => {
-  if (!config.claude.hasOAuthToken && !config.claude.hasApiKey)
-    return res.status(400).json({ error: "No Claude credentials. Run `npm run setup-token`." });
+  if (!config.claude.ready)
+    return res.status(400).json({ error: "No Claude credentials (log in with the `claude` CLI or set CLAUDE_CODE_OAUTH_TOKEN)." });
   if (!config.alpaca.configured) return res.status(400).json({ error: "Alpaca API keys are not configured." });
   const result = runSlotNow(req.params.slot);
   if (!result) return res.status(404).json({ error: "Unknown schedule slot" });
@@ -248,12 +248,14 @@ app.listen(config.port, () => {
   console.log(`\n  Claude Trader server → http://localhost:${config.port}`);
   console.log(`  Trading mode: ${mode}`);
   console.log(`  Model: ${config.claude.model}`);
-  if (!config.claude.hasOAuthToken && !config.claude.hasApiKey) {
-    console.log(`  ⚠ No Claude credentials — run \`npm run setup-token\` to use your Max subscription.`);
+  if (!config.claude.ready) {
+    console.log(`  ⚠ No Claude credentials — log in with \`claude\` or set CLAUDE_CODE_OAUTH_TOKEN.`);
   } else if (config.claude.hasApiKey) {
     console.log(`  ⚠ ANTHROPIC_API_KEY is set — the SDK will bill the API instead of your subscription.`);
-  } else {
+  } else if (config.claude.hasOAuthToken) {
     console.log(`  ✓ Using Claude subscription (CLAUDE_CODE_OAUTH_TOKEN).`);
+  } else {
+    console.log(`  ✓ Using Claude subscription (\`claude\` CLI login).`);
   }
   if (!config.alpaca.configured) console.log(`  ⚠ Alpaca keys missing — set ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY.`);
   console.log(`  Discord alerts: ${config.notify.configured ? "ON" : "off"}`);

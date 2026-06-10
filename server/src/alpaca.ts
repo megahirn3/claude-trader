@@ -190,4 +190,19 @@ export const alpaca = {
     if (params.symbols?.length) q.set("symbols", params.symbols.join(","));
     return request<{ news: unknown[] }>(data(`/v1beta1/news?${q.toString()}`));
   },
+
+  // ── Discovery / screening (free Alpaca screener) ───────────────────────────
+
+  getMovers: (top = 20) =>
+    request<{
+      gainers: Array<{ symbol: string; percent_change: number; change: number; price: number }>;
+      losers: Array<{ symbol: string; percent_change: number; change: number; price: number }>;
+      market_type: string;
+      last_updated: string;
+    }>(data(`/v1beta1/screener/stocks/movers?top=${top}`)),
+
+  getMostActives: (top = 20) =>
+    request<{ most_actives: Array<{ symbol: string; volume: number; trade_count: number }>; last_updated: string }>(
+      data(`/v1beta1/screener/stocks/most-actives?top=${top}&by=volume`),
+    ),
 };

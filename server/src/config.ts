@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 
 // Load .env robustly regardless of where the process was started from. In
 // production the app runs from the server/ workspace (npm start), but the
@@ -24,13 +26,23 @@ const liveEnabled = tradingMode === "live" && allowLiveTrading;
 export const config = {
   port: Number(process.env.PORT ?? 8787),
 
-  claude: {
-    model: process.env.CLAUDE_MODEL ?? "claude-opus-4-8",
-    // True when an OAuth subscription token is present and no API key is forcing
-    // pay-as-you-go billing.
-    hasOAuthToken: Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN),
-    hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY),
-  },
+  claude: (() => {
+    const hasOAuthToken = Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN);
+    const hasApiKey = Boolean(process.env.ANTHROPIC_API_KEY);
+    // The Agent SDK can also authenticate from a Claude subscription login stored
+    // at ~/.claude/.credentials.json — detect it so the bot works off a logged-in
+    // `claude` CLI on this machine, with no explicit token needed.
+    const home = process.env.HOME || homedir() || "/root";
+    const hasCliLogin = existsSync(path.join(home, ".claude", ".credentials.json"));
+    return {
+      model: process.env.CLAUDE_MODEL ?? "claude-opus-4-8",
+      hasOAuthToken,
+      hasApiKey,
+      hasCliLogin,
+      // True when the agent has any working way to reach Claude.
+      ready: hasOAuthToken || hasApiKey || hasCliLogin,
+    };
+  })(),
 
   alpaca: {
     keyId: process.env.ALPACA_API_KEY_ID ?? "",
@@ -55,6 +67,12 @@ export const config = {
     dailyLossLimitPct: Number(process.env.DAILY_LOSS_LIMIT_PCT ?? 3),
     /** Block sells that would round-trip a position opened the same day (PDT / good-faith protection). */
     avoidDayTrades: bool(process.env.AVOID_DAY_TRADES, true),
+    /** Only invest settled cash — never use the account's margin buying power. */
+    noLeverage: bool(process.env.NO_LEVERAGE, true),
+    /** Junk-safety floor (NOT a market-cap/popularity filter): block buys under this share price. 0 disables. */
+    minPriceUsd: Number(process.env.MIN_PRICE_USD ?? 3),
+    /** Block buys of leveraged / inverse ETFs (they decay; not for holding). */
+    excludeLeveragedEtf: bool(process.env.EXCLUDE_LEVERAGED_ETF, true),
   },
 
   data: {

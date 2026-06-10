@@ -66,12 +66,14 @@ fi
 say "Installing the systemd service…"
 NPM_BIN="$(command -v npm)"
 NODE_DIR="$(dirname "$(command -v node)")"
+RUN_HOME="$(getent passwd "${RUN_USER}" | cut -d: -f6)"; RUN_HOME="${RUN_HOME:-/root}"
 SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 
 sed \
   -e "s#__USER__#${RUN_USER}#g" \
   -e "s#__ROOT__#${ROOT}#g" \
   -e "s#__NPM__#${NPM_BIN}#g" \
+  -e "s#__HOME__#${RUN_HOME}#g" \
   -e "s#__PATH__#${NODE_DIR}:/usr/bin:/bin:/usr/local/bin#g" \
   deploy/claude-trader.service | sudo tee "$SERVICE_PATH" >/dev/null
 

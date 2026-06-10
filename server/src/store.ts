@@ -16,7 +16,7 @@ export type RunEvent =
   | { kind: "assistant"; text: string; at: string }
   | { kind: "tool_call"; tool: string; input: unknown; at: string }
   | { kind: "tool_result"; tool: string; summary: string; at: string }
-  | { kind: "decision"; action: string; symbol?: string; rationale: string; at: string }
+  | { kind: "decision"; action: string; symbol?: string; rationale: string; conviction?: number; sources?: string[]; at: string }
   | { kind: "order"; summary: string; detail: unknown; at: string }
   | { kind: "journal"; text: string; at: string }
   | { kind: "error"; message: string; at: string }

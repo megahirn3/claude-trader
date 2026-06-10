@@ -12,6 +12,8 @@ WorkingDirectory=__ROOT__
 # so no API keys are ever stored in systemd.
 Environment=NODE_ENV=production
 Environment=PATH=__PATH__
+# HOME so the Agent SDK can find the `claude` CLI subscription login (~/.claude).
+Environment=HOME=__HOME__
 ExecStart=__NPM__ start
 Restart=on-failure
 RestartSec=10

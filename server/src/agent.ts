@@ -27,7 +27,7 @@ function systemPrompt(allowTrading: boolean): string {
 This is a REVIEW ONLY — you CANNOT place or cancel orders, and you must not try. Your job is to summarize the day:
 1. Read the journal (read_journal) to see what today's earlier cycles planned and did, and get_watchlist.
 2. Pull the account (get_account), positions (list_positions), today's orders (list_orders) and the day's equity curve (get_portfolio_history with period "1D").
-3. Look at how each holding moved (get_stock_snapshot / get_stock_bars) and skim the day's news (get_market_news, WebSearch) for what drove the moves.
+3. Explain how each holding moved: get_quote / get_stock_bars for the price action, and get_company_news / build_dossier / WebSearch for what drove it (catalysts, analyst changes, news, and any upcoming earnings date to flag).
 4. Write a clear end-of-day brief: total P&L for the day and per position, the notable movers and why, what was traded today and whether those calls worked, and a watchlist/plan for tomorrow.
 5. Save that brief with write_journal so tomorrow's morning cycle starts from it, and refresh the watchlist with set_watchlist.
 
@@ -44,12 +44,29 @@ ${liveWarning}
 
 ${MEMORY_RULES}
 
-Your job each cycle:
-1. ORIENT: read_journal + get_watchlist, then get_account, list_positions, list_orders (note any open protective stops). Check get_market_clock.
-2. RESEARCH: use WebSearch / WebFetch for news, analyst views, macro and catalysts; get_market_news for headlines; get_quote for fresh real-time prices and get_stock_bars for technicals (use get_stock_snapshot when you need fuller detail); get_portfolio_history to see how the account is doing. Always price decisions off get_quote — never invent numbers.
-3. DECIDE: form a clear thesis for each relevant holding and any new candidates. Consider diversification, position sizing, valuation, momentum, and risk. Call record_decision for each conclusion (BUY / SELL / TRIM / ADD / HOLD / WATCH / STOP) with concise rationale BEFORE acting.
-4. ACT: if and only if a decision warrants it, place orders with place_order. Do not trade just to be active — HOLD is a valid outcome.
-5. HAND OFF: write_journal + set_watchlist (see Memory above).
+Your mandate: find stocks with the best PROBABILITY-WEIGHTED UPSIDE — the highest expected return for the risk taken. You are hunting for mispriced, under-appreciated opportunities. Do NOT default to the biggest, most popular mega-caps just because they're familiar or heavily covered; popularity and coverage are NOT the goal — expected return is. A small- or mid-cap with a strong catalyst, accelerating fundamentals, and analyst upside can be a far better buy than a crowded mega-cap. Cast a wide net across the whole market.
+
+Your job each cycle — work like a buy-side analyst hunting for alpha, grounding every view in data you actually pulled:
+1. ORIENT: read_journal + get_watchlist, then get_account, list_positions, list_orders (note any open protective stops). Check get_market_clock and get_portfolio_history.
+2. DISCOVER fresh candidates (don't just analyze names you already know):
+   - get_market_movers to see what's actually moving (gainers = momentum/catalyst; losers = potential oversold reversals; most-active = where the flow is) — across all caps, not just mega-caps.
+   - WebSearch to screen for ideas: e.g. "stocks with biggest upside to analyst price target", "recent analyst upgrades [sector]", "undervalued growth stocks", "small/mid-cap stocks with catalysts this week/quarter", thematic plays, earnings beats with raised guidance. Generate a SHORTLIST of 3-6 names worth deep work.
+3. RESEARCH each shortlisted name + each holding deeply (multi-source):
+   - build_dossier(symbol) FIRST — live quote, fundamentals (valuation / margins / growth / financial health), analyst recommendation & price target, recent earnings surprises + the NEXT earnings date, insider activity, news.
+   - get_fundamentals to compare candidates head-to-head; get_analyst_view for Street sentiment and upside to price target; get_earnings for catalysts; get_insider_activity for insider conviction; get_company_news / WebSearch / WebFetch for the qualitative story, recent estimate revisions/upgrades, and what's changed.
+   - get_quote for the live price, get_stock_bars for the technical setup. Never invent numbers.
+   - If a data source is unavailable (dossier returns "not configured"/premium notes), get the missing piece (e.g. analyst price targets) via WebSearch and SAY SO.
+4. ESTIMATE EXPECTED RETURN & DECIDE: for each conclusion, think in terms of a probability-weighted return — sketch a realistic 6-12mo upside target and a downside, judge the odds, and prefer ASYMMETRIC setups (limited downside, meaningful upside) with a real catalyst. Then call record_decision (BUY / SELL / TRIM / ADD / HOLD / WATCH / STOP) as an investment memo: thesis with BOTH bull and bear, your rough upside/downside and why the odds favor it, valuation context (vs sector / history / analyst target), key catalysts (incl. next earnings date) and risks, a conviction score (1-5), and sources. You may — and often should — disagree with the crowd; justify it.
+5. ACT: only when the expected-return case genuinely warrants it, place orders with place_order. HOLD/WATCH is fine when nothing clears the bar. Avoid opening into a name's earnings date unless the event IS the thesis.
+6. HAND OFF: write_journal + set_watchlist (carry your best unacted ideas forward).
+
+Analyst discipline (this is what makes the research trustworthy):
+- Run at least one WebSearch every cycle — both to discover candidates beyond the names you already know, and to cross-check your top pick's narrative against a fresh, current source. The dossier is a strong starting point, but don't let it be your only window.
+- Judge analysts by SIGNAL, not volume: upside to price target, recent upgrades and estimate revisions, and beat/raise history matter — the sheer number of analysts covering a name does not.
+- Verify material claims across at least two sources; prefer primary data (fundamentals, earnings, filings) over headlines.
+- Always cite sources in record_decision. If two sources conflict, note it and say which you trust and why.
+- Separate fact from inference. If data is stale, premium-gated, or missing, say so instead of guessing.
+- Mind liquidity and quality: a name needs enough volume to trade cleanly, and you should avoid obvious pump-and-dump/penny junk — but legitimate small- and mid-caps are very much in scope.
 
 Position sizing & risk (IMPORTANT — this is a small account):
 - Any single BUY may use at most ${config.trading.maxTradePct}% of current portfolio value. The server enforces this and will reject larger buys.
@@ -57,6 +74,7 @@ Position sizing & risk (IMPORTANT — this is a small account):
 - Protect positions: consider a protective stop-loss (side='sell', type='stop', time_in_force='gtc', qty) under key support for positions you hold, especially before the close. Don't stack duplicate stops — check list_orders first.
 - Day-trade guard: you cannot sell a position that was bought today (the server blocks it). Plan entries accordingly — buy only what you're comfortable holding overnight.
 - Daily-loss circuit breaker: if the account is down ${config.trading.dailyLossLimitPct}%+ today, new buys are blocked; you may still reduce risk.
+- No leverage: total invested can never exceed your settled CASH — the account's 4× margin buying power is ignored and the server rejects buys beyond cash. Size against cash on hand, not buying power.
 - Sells are not size-capped (reducing exposure is always allowed).
 
 Rules:
@@ -102,8 +120,17 @@ export async function runCycle(run: Run, userPrompt: string, opts: { allowTradin
         mcpServers: { alpaca: alpacaServer },
         allowedTools: [...allowed],
         canUseTool: permissionFor(allowed),
-        // We never want the agent touching the host filesystem or shell.
-        disallowedTools: ["Bash", "Write", "Edit", "Read", "NotebookEdit"],
+        // Defense-in-depth: the SDK loads many built-in tools by default. canUseTool
+        // already denies anything outside `allowed`, but we ALSO hard-remove every
+        // built-in that could touch the host or derail the agent (filesystem, shell,
+        // process control, subagents, planning, skills, interactive prompts). Only
+        // our Alpaca tools + WebSearch/WebFetch remain.
+        disallowedTools: [
+          "Bash", "Write", "Edit", "Read", "NotebookEdit",
+          "Glob", "Grep", "LSP", "KillShell",
+          "Task", "TaskOutput", "TodoWrite", "Skill",
+          "ExitPlanMode", "EnterPlanMode", "AskUserQuestion",
+        ],
       },
     });
 

@@ -16,6 +16,44 @@ import {
   type WatchlistItem,
 } from "./api";
 
+// ── Minimal, safe markdown renderer ───────────────────────────────────────────
+// Escapes HTML first, then applies a small markdown subset (headings, bold,
+// italics, inline code, links, bullet lists) — so agent journals and summaries
+// render with real formatting instead of raw ** and ##.
+function mdToHtml(src: string): string {
+  let s = src.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  const out: string[] = [];
+  let inList = false;
+  for (const raw of s.split(/\n/)) {
+    const h = raw.match(/^\s*(#{1,4})\s+(.*)$/);
+    const li = raw.match(/^\s*[-*]\s+(.*)$/);
+    if (h) {
+      if (inList) { out.push("</ul>"); inList = false; }
+      out.push(`<div class="md-h">${h[2]}</div>`);
+    } else if (li) {
+      if (!inList) { out.push("<ul>"); inList = true; }
+      out.push(`<li>${li[1]}</li>`);
+    } else if (raw.trim() === "") {
+      if (inList) { out.push("</ul>"); inList = false; }
+      out.push('<div class="md-sp"></div>');
+    } else {
+      if (inList) { out.push("</ul>"); inList = false; }
+      out.push(`<div>${raw}</div>`);
+    }
+  }
+  if (inList) out.push("</ul>");
+  return out.join("");
+}
+
+function Markdown({ text, className }: { text: string; className?: string }) {
+  return <div className={`md ${className ?? ""}`} dangerouslySetInnerHTML={{ __html: mdToHtml(text) }} />;
+}
+
 export function App() {
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
@@ -283,7 +321,7 @@ function JournalCard() {
                 <span className="journal-label">{e.label}</span>
                 <span className="dim small">{new Date(e.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
               </div>
-              <div className="journal-content">{e.content}</div>
+              <Markdown className="journal-content" text={e.content} />
             </div>
           ))}
         </div>
@@ -669,7 +707,7 @@ function EventRow({ event }: { event: RunEvent }) {
       return (
         <div className="event assistant">
           <div className="event-tag">Claude</div>
-          <div className="event-body">{event.text}</div>
+          <Markdown className="event-body" text={event.text} />
         </div>
       );
     case "thinking":
@@ -696,8 +734,16 @@ function EventRow({ event }: { event: RunEvent }) {
     case "decision":
       return (
         <div className="event decision">
-          <div className="event-tag decision-tag">{event.action}{event.symbol ? ` ${event.symbol}` : ""}</div>
-          <div className="event-body">{event.rationale}</div>
+          <div className="event-tag decision-tag">
+            {event.action}{event.symbol ? ` ${event.symbol}` : ""}
+            {typeof event.conviction === "number" && <span className="conviction">{"●".repeat(event.conviction)}{"○".repeat(Math.max(0, 5 - event.conviction))}</span>}
+          </div>
+          <div className="event-body">
+            <Markdown text={event.rationale} />
+            {event.sources && event.sources.length > 0 && (
+              <div className="sources dim small">sources: {event.sources.join(" · ")}</div>
+            )}
+          </div>
         </div>
       );
     case "order":
@@ -711,7 +757,7 @@ function EventRow({ event }: { event: RunEvent }) {
       return (
         <div className="event journal-event">
           <div className="event-tag">journal</div>
-          <div className="event-body">{event.text}</div>
+          <Markdown className="event-body" text={event.text} />
         </div>
       );
     case "error":
@@ -726,7 +772,7 @@ function EventRow({ event }: { event: RunEvent }) {
         <div className="event result">
           <div className="event-tag">summary</div>
           <div className="event-body">
-            {event.summary}
+            <Markdown text={event.summary} />
             {event.costUsd != null && <div className="dim small">Cost: ${event.costUsd.toFixed(4)} · {event.numTurns ?? "?"} turns</div>}
           </div>
         </div>

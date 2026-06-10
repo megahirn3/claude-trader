@@ -28,6 +28,8 @@ export interface MarketData {
   getSnapshots(symbols: string[]): Promise<Record<string, unknown>>;
   getBars(params: { symbols: string[]; timeframe?: string; limit?: number }): Promise<Record<string, unknown>>;
   getNews(params: { symbols?: string[]; limit?: number }): Promise<{ news: unknown[] }>;
+  getMovers(top?: number): ReturnType<typeof alpaca.getMovers>;
+  getMostActives(top?: number): ReturnType<typeof alpaca.getMostActives>;
 }
 
 // ── Finnhub (free real-time US quotes) ───────────────────────────────────────
@@ -136,6 +138,14 @@ class MarketDataProvider implements MarketData {
 
   getNews(params: { symbols?: string[]; limit?: number }) {
     return alpaca.getNews(params);
+  }
+
+  getMovers(top = 20) {
+    return alpaca.getMovers(top);
+  }
+
+  getMostActives(top = 20) {
+    return alpaca.getMostActives(top);
   }
 }
 
