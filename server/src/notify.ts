@@ -94,6 +94,22 @@ export function notifyRunEvent(run: Run, e: RunEvent): void {
   }
 }
 
+/** Alert that the kill switch fired. */
+export function notifyKill(cancelledOrders: number, closedPositions: number, errors: string[]): void {
+  if (!config.notify.configured) return;
+  const lines = [
+    `Autopilot paused and trading halted.`,
+    `Cancelled **${cancelledOrders}** order(s), liquidated **${closedPositions}** position(s) at market.`,
+  ];
+  if (errors.length) lines.push(`⚠️ ${errors.join("; ")}`);
+  void post({
+    title: "🚨 KILL SWITCH ACTIVATED",
+    description: lines.join("\n"),
+    color: COLOR.red,
+    timestamp: new Date().toISOString(),
+  });
+}
+
 /** Send a test message so the user can verify their webhook from the dashboard. */
 export async function sendTestNotification(): Promise<boolean> {
   if (!config.notify.configured) return false;

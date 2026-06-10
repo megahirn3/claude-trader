@@ -128,6 +128,16 @@ export const alpaca = {
   cancelOrder: (id: string) =>
     request<void>(trading(`/v2/orders/${encodeURIComponent(id)}`), { method: "DELETE" }),
 
+  /** Cancel ALL open orders. Returns one entry per order with its cancel status. */
+  cancelAllOrders: () =>
+    request<Array<{ id: string; status: number }>>(trading("/v2/orders"), { method: "DELETE" }),
+
+  /** Liquidate ALL positions at market (and cancel any open orders first). */
+  closeAllPositions: () =>
+    request<Array<{ symbol: string; status: number }>>(trading("/v2/positions?cancel_orders=true"), {
+      method: "DELETE",
+    }),
+
   getPortfolioHistory: (params: { period?: string; timeframe?: string } = {}) => {
     const q = new URLSearchParams();
     q.set("period", params.period ?? "1M");

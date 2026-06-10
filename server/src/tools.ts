@@ -6,6 +6,7 @@ import { marketData } from "./providers/marketdata.js";
 import { config } from "./config.js";
 import { runStore } from "./store.js";
 import { addJournalEntry, listJournal, getWatchlist, setWatchlist } from "./db.js";
+import { isHalted } from "./controlState.js";
 
 const now = () => new Date().toISOString();
 
@@ -308,6 +309,13 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
         async (args) => {
           const symbol = args.symbol.toUpperCase();
           logCall("place_order", { ...args, symbol });
+
+          // ── Kill switch ──────────────────────────────────────────────────
+          if (isHalted()) {
+            const msg = "Trading is HALTED (kill switch active). No orders can be placed until a human resumes from the dashboard.";
+            runStore.emit(runId, { kind: "error", message: msg, at: now() });
+            return fail(msg);
+          }
 
           // ── Shape validation ─────────────────────────────────────────────
           if (!args.qty && !args.notional) return fail("Provide either qty or notional.");

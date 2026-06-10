@@ -43,14 +43,43 @@ export function App() {
     }
   }, []);
 
-  useEffect(() => {
+  const loadConfig = useCallback(() => {
     api.config().then(setCfg).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadConfig();
     refreshPortfolio();
-  }, [refreshPortfolio]);
+  }, [loadConfig, refreshPortfolio]);
+
+  const kill = useCallback(async () => {
+    if (!window.confirm("KILL SWITCH\n\nThis will cancel ALL open orders, SELL ALL positions at market, and pause the bot. Continue?")) return;
+    try {
+      const r = await api.kill();
+      const errs = r.errors?.length ? `\n\nIssues: ${r.errors.join("; ")}` : "";
+      window.alert(`Kill switch done.\nCancelled ${r.cancelledOrders} order(s), liquidated ${r.closedPositions} position(s).${errs}`);
+    } catch (e) {
+      window.alert(`Kill switch failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      loadConfig();
+      refreshPortfolio();
+    }
+  }, [loadConfig, refreshPortfolio]);
+
+  const resume = useCallback(async () => {
+    await api.resume().catch(() => {});
+    loadConfig();
+  }, [loadConfig]);
 
   return (
     <div className="app">
-      <Header cfg={cfg} clock={clock} />
+      <Header cfg={cfg} clock={clock} onKill={kill} />
+      {cfg?.halted && (
+        <div className="banner halted">
+          <span>⛔ <strong>Trading halted</strong> — the autopilot is paused and the agent can't place orders.</span>
+          <button className="resume-btn" onClick={resume}>Resume trading</button>
+        </div>
+      )}
       {error && <div className="banner error">{error}</div>}
       <main>
         <section className="left">
@@ -70,7 +99,7 @@ export function App() {
   );
 }
 
-function Header({ cfg, clock }: { cfg: AppConfig | null; clock: { is_open: boolean } | null }) {
+function Header({ cfg, clock, onKill }: { cfg: AppConfig | null; clock: { is_open: boolean } | null; onKill: () => void }) {
   return (
     <header className="header">
       <div className="brand">
@@ -81,6 +110,11 @@ function Header({ cfg, clock }: { cfg: AppConfig | null; clock: { is_open: boole
         </div>
       </div>
       <div className="pills">
+        {cfg && cfg.ready.alpaca && !cfg.halted && (
+          <button className="kill-btn" onClick={onKill} title="Cancel all orders, sell all positions, pause the bot">
+            ⏻ Kill switch
+          </button>
+        )}
         {cfg && (
           <>
             <Pill ok={cfg.ready.usingSubscription} warn={cfg.ready.usingApiKey}>

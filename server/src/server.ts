@@ -12,6 +12,8 @@ import { runCycle } from "./agent.js";
 import { startScheduler, scheduleState, setScheduleEnabled, runSlotNow } from "./scheduler.js";
 import { listJournal, getWatchlist } from "./db.js";
 import { sendTestNotification } from "./notify.js";
+import { killSwitch, resume } from "./control.js";
+import { isHalted } from "./controlState.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -41,6 +43,7 @@ api.get("/config", (_req, res) => {
     broker: broker.name,
     dataSource: marketData.quoteSource(),
     notify: { discord: config.notify.configured },
+    halted: isHalted(),
     ready: {
       // The agent can run if it has a way to reach Claude via the subscription.
       claude: config.claude.hasOAuthToken || config.claude.hasApiKey,
@@ -105,6 +108,18 @@ api.get("/journal", (req, res) => {
 api.get("/watchlist", (_req, res) => {
   res.json(getWatchlist());
 });
+
+// ── Kill switch ───────────────────────────────────────────────────────────────
+api.post("/kill", async (_req, res) => {
+  if (!config.alpaca.configured) return res.status(400).json({ error: "Alpaca API keys are not configured." });
+  try {
+    res.json(await killSwitch());
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+api.post("/resume", (_req, res) => res.json(resume()));
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 api.post("/notify/test", async (_req, res) => {
@@ -242,6 +257,7 @@ app.listen(config.port, () => {
   }
   if (!config.alpaca.configured) console.log(`  ⚠ Alpaca keys missing — set ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY.`);
   console.log(`  Discord alerts: ${config.notify.configured ? "ON" : "off"}`);
+  if (isHalted()) console.log(`  ⛔ TRADING HALTED (kill switch active) — resume from the dashboard to trade.`);
   startScheduler();
   console.log("");
 });

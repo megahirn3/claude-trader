@@ -3,6 +3,7 @@ import { alpaca } from "./alpaca.js";
 import { runStore } from "./store.js";
 import { runCycle } from "./agent.js";
 import { kvGet, kvSet } from "./db.js";
+import { isHalted } from "./controlState.js";
 
 /**
  * Daily autopilot. Ticks every 30s, and when the wall-clock time in US market
@@ -111,7 +112,7 @@ async function fire(slot: ScheduleSlot, etDate: string): Promise<void> {
 }
 
 function tick(): void {
-  if (!config.schedule.enabled) return;
+  if (!config.schedule.enabled || isHalted()) return;
   const m = nowMarket();
   for (const slot of config.schedule.slots) {
     if (!slot.enabled) continue;

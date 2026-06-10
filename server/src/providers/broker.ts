@@ -35,6 +35,10 @@ export interface Broker {
   getOrders(params?: { status?: string; limit?: number; symbols?: string[] }): Promise<AlpacaOrder[]>;
   placeOrder(order: OrderRequest): Promise<AlpacaOrder>;
   cancelOrder(id: string): Promise<void>;
+  /** Emergency: cancel every open order. Returns one entry per order. */
+  cancelAllOrders(): Promise<Array<{ id: string; status: number }>>;
+  /** Emergency: liquidate every position at market. Returns one entry per position. */
+  closeAllPositions(): Promise<Array<{ symbol: string; status: number }>>;
   getClock(): Promise<{ is_open: boolean; next_open: string; next_close: string; timestamp: string }>;
   getCalendar(start: string, end: string): Promise<Array<{ date: string; open: string; close: string }>>;
   getPortfolioHistory(params?: { period?: string; timeframe?: string }): Promise<PortfolioHistory>;
@@ -47,6 +51,8 @@ export const broker: Broker = {
   getOrders: (params) => alpaca.getOrders(params ?? {}),
   placeOrder: (order) => alpaca.placeOrder(order),
   cancelOrder: (id) => alpaca.cancelOrder(id),
+  cancelAllOrders: () => alpaca.cancelAllOrders(),
+  closeAllPositions: () => alpaca.closeAllPositions(),
   getClock: () => alpaca.getClock(),
   getCalendar: (start, end) => alpaca.getCalendar(start, end),
   getPortfolioHistory: (params) => alpaca.getPortfolioHistory(params ?? {}),

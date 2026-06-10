@@ -208,6 +208,23 @@ webhook works. Set `NOTIFY_RUN_START=false` to drop the per-run start pings.
 The webhook URL is a secret — it lives only in `.env` (git-ignored), never in
 code.
 
+## Kill switch
+
+A red **⏻ Kill switch** sits in the dashboard header. One click (with a confirm)
+will, in order:
+
+1. **Halt** trading — the agent can no longer place any order.
+2. **Pause** the daily autopilot.
+3. **Cancel** every open order.
+4. **Liquidate** every position at market.
+5. **Alert** Discord.
+
+The halt is set *first* and **persisted**, so even if the liquidation call fails
+or the server restarts, the bot stays frozen — a red banner shows until you
+press **Resume trading**. Liquidation steps are independent: if one fails the
+other still runs, and failures are reported, not swallowed. (`POST /api/kill`,
+`POST /api/resume`.)
+
 ## Safety
 
 Money is hard to get back, so the design is defensive:

@@ -12,6 +12,7 @@ export interface AppConfig {
   broker: string;
   dataSource: string;
   notify: { discord: boolean };
+  halted: boolean;
   ready: {
     claude: boolean;
     usingSubscription: boolean;
@@ -175,6 +176,17 @@ export const api = {
   testNotify: async (): Promise<void> => {
     const res = await fetch("/api/notify/test", { method: "POST" });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Failed to send test");
+  },
+
+  kill: async (): Promise<{ cancelledOrders: number; closedPositions: number; errors: string[] }> => {
+    const res = await fetch("/api/kill", { method: "POST" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Kill switch failed");
+    return res.json();
+  },
+
+  resume: async (): Promise<void> => {
+    const res = await fetch("/api/resume", { method: "POST" });
+    if (!res.ok) throw new Error("Resume failed");
   },
 };
 

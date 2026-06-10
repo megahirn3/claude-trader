@@ -59,6 +59,20 @@ body {
 
 .banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; }
 .banner.error { background: #2a1413; color: var(--down); border: 1px solid #44211f; }
+.banner.halted {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: #2a1413; color: #ffb3b3; border: 1px solid #6b2420; font-size: 14px;
+}
+.resume-btn {
+  background: var(--up); color: #0a1a12; border: none; font-weight: 700;
+  padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; white-space: nowrap;
+}
+
+.kill-btn {
+  background: #2a1413; color: #ff8a8a; border: 1px solid #6b2420; font-weight: 700;
+  padding: 4px 12px; border-radius: 999px; cursor: pointer; font-size: 12px;
+}
+.kill-btn:hover { background: var(--down); color: #1a0a0a; border-color: var(--down); }
 
 /* Layout */
 main { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
