@@ -16,6 +16,20 @@ function bool(value: string | undefined, fallback = false): boolean {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
+export type DayTradeMode = "auto" | "on" | "off";
+/**
+ * Day-trade handling. The PDT rule was eliminated (SEC/FINRA, June 4 2026), so
+ * margin accounts can round-trip freely. "auto" does the right thing per account
+ * type: allow same-day round-trips on a margin account, but keep the protective
+ * block on a cash account (where reusing unsettled proceeds = good-faith violation).
+ */
+function dayTradeMode(value: string | undefined): DayTradeMode {
+  const s = (value ?? "auto").trim().toLowerCase();
+  if (["off", "false", "0", "no"].includes(s)) return "off";
+  if (["on", "true", "1", "yes"].includes(s)) return "on";
+  return "auto";
+}
+
 const tradingMode = (process.env.TRADING_MODE ?? "paper").toLowerCase() === "live" ? "live" : "paper";
 const allowLiveTrading = bool(process.env.ALLOW_LIVE_TRADING, false);
 
@@ -65,8 +79,8 @@ export const config = {
     maxTradePct: Number(process.env.MAX_TRADE_PCT ?? 5),
     /** Block new buys when today's equity drawdown exceeds this percentage. */
     dailyLossLimitPct: Number(process.env.DAILY_LOSS_LIMIT_PCT ?? 3),
-    /** Block sells that would round-trip a position opened the same day (PDT / good-faith protection). */
-    avoidDayTrades: bool(process.env.AVOID_DAY_TRADES, true),
+    /** Day-trade handling: "auto" (account-aware), "on" (always block same-day sells), "off" (never). */
+    avoidDayTrades: dayTradeMode(process.env.AVOID_DAY_TRADES),
     /** Only invest settled cash — never use the account's margin buying power. */
     noLeverage: bool(process.env.NO_LEVERAGE, true),
     /** Junk-safety floor (NOT a market-cap/popularity filter): block buys under this share price. 0 disables. */

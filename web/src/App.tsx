@@ -174,7 +174,8 @@ function Header({ cfg, clock, onKill }: { cfg: AppConfig | null; clock: { is_ope
             <Pill ok small>≤{cfg.trading.maxTradePct}% / trade</Pill>
             {cfg.trading.noLeverage && <Pill ok small>no leverage</Pill>}
             <Pill ok small>−{cfg.trading.dailyLossLimitPct}% breaker</Pill>
-            {cfg.trading.avoidDayTrades && <Pill ok small>no day-trades</Pill>}
+            {cfg.trading.avoidDayTrades === "on" && <Pill ok small>no day-trades</Pill>}
+            {cfg.trading.avoidDayTrades === "auto" && <Pill ok small>day-trades: auto</Pill>}
             {(cfg.trading.minPriceUsd > 0 || cfg.trading.excludeLeveragedEtf) && (
               <Pill ok small>
                 {cfg.trading.minPriceUsd > 0 ? `≥$${cfg.trading.minPriceUsd}` : ""}

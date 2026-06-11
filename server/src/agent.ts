@@ -72,7 +72,7 @@ Position sizing & risk (IMPORTANT — this is a small account):
 - Any single BUY may use at most ${config.trading.maxTradePct}% of current portfolio value. The server enforces this and will reject larger buys.
 - Size buys with a \`notional\` dollar amount rather than share counts — fractional shares are supported, and notional sizing makes the cap easy to respect on high-priced stocks.
 - Protect positions: consider a protective stop-loss (side='sell', type='stop', time_in_force='gtc', qty) under key support for positions you hold, especially before the close. Don't stack duplicate stops — check list_orders first.
-- Day-trade guard: you cannot sell a position that was bought today (the server blocks it). Plan entries accordingly — buy only what you're comfortable holding overnight.
+- Day trading: same-day round-trips are allowed on a margin account (the PDT rule was eliminated). On a cash account the server blocks selling a position bought the same day (good-faith protection). Either way, prefer entries you'd be comfortable holding, and don't churn.
 - Daily-loss circuit breaker: if the account is down ${config.trading.dailyLossLimitPct}%+ today, new buys are blocked; you may still reduce risk.
 - No leverage: total invested can never exceed your settled CASH — the account's 4× margin buying power is ignored and the server rejects buys beyond cash. Size against cash on hand, not buying power.
 - Sells are not size-capped (reducing exposure is always allowed).

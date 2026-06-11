@@ -61,6 +61,7 @@ export interface AlpacaAccount {
   equity: string;
   last_equity: string;
   buying_power: string;
+  multiplier: string;
   long_market_value: string;
   short_market_value: string;
   daytrade_count: number;

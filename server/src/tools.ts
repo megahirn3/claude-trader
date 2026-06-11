@@ -560,12 +560,21 @@ export function buildAlpacaServer(runId: string, runLabel: string) {
             }
           }
 
-          // Guard 3: day-trade guard — don't sell what was bought today.
-          if (args.side === "sell" && config.trading.avoidDayTrades) {
+          // Guard 3: day-trade guard (account-aware). The PDT rule was eliminated
+          // (SEC/FINRA, June 4 2026), so margin accounts may round-trip freely.
+          // "auto": allow on margin, block on cash (unsettled-funds / good-faith
+          // protection). "on": always block. "off": never block.
+          if (args.side === "sell" && config.trading.avoidDayTrades !== "off") {
             try {
-              if (await boughtToday(symbol)) {
+              let enforce = config.trading.avoidDayTrades === "on";
+              if (config.trading.avoidDayTrades === "auto") {
+                // multiplier > 1 ⇒ margin account ⇒ no day-trade restriction.
+                const acct = await broker.getAccount();
+                enforce = Number(acct.multiplier ?? "1") <= 1; // cash account
+              }
+              if (enforce && (await boughtToday(symbol))) {
                 return block(
-                  `Order blocked: ${symbol} was bought today, and selling it now would create a day trade (PDT rules) or reuse unsettled cash. Hold it at least overnight — a protective stop with time_in_force='gtc' placed TOMORROW is the right tool if you're worried. (Set AVOID_DAY_TRADES=false to disable this guard.)`,
+                  `Order blocked: ${symbol} was bought today. On a cash account, selling it now and reusing the proceeds would risk a good-faith violation — hold it at least overnight. (This applies to cash accounts only; margin accounts round-trip freely. Set AVOID_DAY_TRADES=off to disable, or =on to always enforce.)`,
                 );
               }
             } catch (e) {

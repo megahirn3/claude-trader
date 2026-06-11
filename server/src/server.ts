@@ -38,7 +38,7 @@ api.get("/config", (_req, res) => {
       liveEnabled: config.trading.liveEnabled,
       maxTradePct: config.trading.maxTradePct,
       dailyLossLimitPct: config.trading.dailyLossLimitPct,
-      avoidDayTrades: config.trading.avoidDayTrades,
+      avoidDayTrades: config.trading.avoidDayTrades, // "auto" | "on" | "off"
       noLeverage: config.trading.noLeverage,
       minPriceUsd: config.trading.minPriceUsd,
       excludeLeveragedEtf: config.trading.excludeLeveragedEtf,

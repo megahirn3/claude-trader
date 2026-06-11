@@ -7,7 +7,7 @@ export interface AppConfig {
     liveEnabled: boolean;
     maxTradePct: number;
     dailyLossLimitPct: number;
-    avoidDayTrades: boolean;
+    avoidDayTrades: "auto" | "on" | "off";
     noLeverage: boolean;
     minPriceUsd: number;
     excludeLeveragedEtf: boolean;
