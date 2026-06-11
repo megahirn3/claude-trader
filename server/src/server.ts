@@ -242,6 +242,24 @@ api.get("/runs/:id/stream", (req, res) => {
 
 app.use("/api", api);
 
+// ── Preview: the redesigned "Warm Terminal" UI at /v2 (built from web2/) ───────
+const web2Dist = path.resolve(__dirname, "../../web2/dist");
+if (fs.existsSync(web2Dist)) {
+  app.use(
+    "/v2",
+    express.static(web2Dist, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith("index.html")) res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        else if (filePath.includes(`${path.sep}assets${path.sep}`)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      },
+    }),
+  );
+  app.get("/v2/*", (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.sendFile(path.join(web2Dist, "index.html"));
+  });
+}
+
 // ── Serve the built frontend in production ────────────────────────────────────
 const webDist = path.resolve(__dirname, "../../web/dist");
 if (fs.existsSync(webDist)) {
