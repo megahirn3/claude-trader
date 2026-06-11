@@ -89,6 +89,10 @@ export function App() {
   useEffect(() => {
     loadConfig();
     refreshPortfolio();
+    // Live-refresh the account/positions/orders (prices, market values, P&L)
+    // every 10 seconds so the displayed stock data stays current.
+    const t = setInterval(refreshPortfolio, 10000);
+    return () => clearInterval(t);
   }, [loadConfig, refreshPortfolio]);
 
   const kill = useCallback(async () => {
